@@ -40,7 +40,14 @@ public sealed class DriverUpdate
 
     // Только для Kind == Installer.
     public string? DownloadUrl { get; init; }
+    /// <summary>Имя файла, если в ссылке его нет (у Honor и Huawei вместо имени длинный токен).</summary>
+    public string? FileName { get; init; }
     public string? Referer { get; init; }
+    /// <summary>
+    /// Архив без контрольной суммы, но скачан по HTTPS с сервера самого производителя (Honor, Huawei).
+    /// Установщик внутри всё равно проверяется по цифровой подписи, драйверы INF — самой Windows.
+    /// </summary>
+    public bool TrustArchiveFromVendor { get; init; }
     /// <summary>Подпись .exe должна принадлежать этой компании, иначе не запускаем.</summary>
     public string? ExpectedSigner { get; init; }
     /// <summary>Контрольная сумма от производителя, если он её публикует (ASUS).</summary>

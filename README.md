@@ -25,7 +25,7 @@
 
 - **Сканирование всех устройств** через WMI с разбивкой: *нет драйвера*, *есть обновление*, *ошибка*, *актуально*.
 - **Windows Update** — драйверы, проверенные Microsoft, ставятся автоматически.
-- **Официальные каталоги производителей ноутбуков** — ASUS, Lenovo, HP, Dell. Драйвер подбирается по Hardware ID и модели компьютера.
+- **Официальные каталоги производителей ноутбуков** — ASUS, Lenovo, HP, Dell (драйвер подбирается по Hardware ID и модели компьютера), Honor и Huawei (по модели и названию пакета).
 - **Видеокарты** — свежие драйверы NVIDIA и AMD с сайтов производителей.
 - **Около 30 брендов ноутбуков** распознаются по SMBIOS: MSI, Acer, Gigabyte, Huawei, Honor, Xiaomi, Samsung, Razer, Fujitsu и другие. Для тех, кого нельзя проверить автоматически, — ссылка на страницу драйверов и фирменная утилита.
 - **Безопасность установки**
@@ -43,9 +43,10 @@
 | Lenovo | каталог `download.lenovo.com` по типу машины, SHA-256 |
 | HP | каталоги HP Image Assistant по SystemID платы, SHA-256 |
 | Dell | `CatalogIndexPC` по SystemSKU, SHA-256 |
+| Honor, Huawei | API сайта поддержки по коду модели; пакет подбирается по названию («IntelWLAN 22.190.0.4») — к установке не отмечается автоматически |
 | NVIDIA | API GeForce Experience по Device ID |
 | AMD | страницы продуктов amd.com |
-| Intel, MSI, Acer, Gigabyte и др. | ссылка на страницу драйверов — их сайты не отдают список программам |
+| Intel, MSI, Acer, Gigabyte, Razer, Fujitsu и др. | ссылка на страницу драйверов — их сайты не отдают список программам или драйверы есть только в фирменной утилите |
 
 ## Установка
 
@@ -102,7 +103,7 @@ DriverScout/
 ├─ DeviceScanner.cs         сканирование устройств (WMI)
 ├─ WindowsUpdateSource.cs   поиск и установка через Windows Update
 ├─ VendorSources.cs         NVIDIA, AMD, Intel и общие помощники
-├─ AsusSource.cs, LenovoSource.cs, HpSource.cs, DellSource.cs
+├─ AsusSource.cs, LenovoSource.cs, HpSource.cs, DellSource.cs, HonorHuaweiSource.cs
 ├─ CabCatalog.cs            загрузка и распаковка .cab-каталогов
 ├─ VendorInstaller.cs       загрузка, проверка подписи и SHA-256, запуск установщика
 ├─ OemBrands.cs             справочник брендов ноутбуков
@@ -114,7 +115,8 @@ DriverScout/
 
 ## Ограничения
 
-- Сайты Intel, MSI, Acer и Gigabyte закрывают списки драйверов от программ — для них только ссылка.
+- Сайты Intel, MSI, Acer, Gigabyte, Razer и Fujitsu закрывают списки драйверов от программ — для них только ссылка.
+- Honor и Huawei не публикуют Hardware ID и контрольные суммы: драйвер подбирается по названию, архив проверяется подписью установщика внутри или самой Windows (INF через `pnputil`).
 - Установщики производителей запускаются в интерактивном режиме, а не тихо.
 - Только Windows x64.
 

@@ -21,7 +21,9 @@ public static class VendorInstaller
             return (false, "Нет ссылки на установщик");
 
         Directory.CreateDirectory(DownloadDir);
-        var file = Path.Combine(DownloadDir, Path.GetFileName(new Uri(update.DownloadUrl).LocalPath));
+        var name = update.FileName ?? Path.GetFileName(new Uri(update.DownloadUrl).LocalPath);
+        name = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim(' ', '-', '.');
+        var file = Path.Combine(DownloadDir, name);
 
         // Уже скачанный и прошедший проверку файл повторно не качаем.
         if (!File.Exists(file) || Verify(file, update) is not null)
@@ -42,7 +44,12 @@ public static class VendorInstaller
         if (IsZip(file))
         {
             progress("Распаковываю архив…");
-            (setup, var zipError) = ExtractSetup(file);
+            (setup, var infDir, var zipError) = ExtractSetup(file);
+            if (infDir is not null)
+            {
+                progress("Устанавливаю драйвер через pnputil…");
+                return await InstallInfAsync(infDir);
+            }
             if (setup is null) return (false, zipError!);
         }
 
@@ -103,28 +110,58 @@ public static class VendorInstaller
                 return "Контрольная сумма не совпадает с опубликованной — файл повреждён или подменён";
         }
         if (IsZip(file))
-            return update.Sha256 is { Length: > 0 } ? null : "Архив без контрольной суммы — установка отменена";
+            return update.Sha256 is { Length: > 0 }
+                   || (update.TrustArchiveFromVendor && update.DownloadUrl!.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                ? null : "Архив без контрольной суммы — установка отменена";
         return CheckSignature(file, update.ExpectedSigner!);
     }
 
     private static bool IsZip(string file) => file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Распаковывает архив и находит в нём установщик (у ASUS обычно AsusSetup.exe).</summary>
-    private static (string? setup, string? error) ExtractSetup(string zip)
+    /// <summary>
+    /// Распаковывает архив и находит в нём установщик (у ASUS обычно AsusSetup.exe).
+    /// Если установщика нет, но есть INF-файлы (так бывает у Honor и Huawei) — возвращает папку для pnputil.
+    /// </summary>
+    private static (string? setup, string? infDir, string? error) ExtractSetup(string zip)
     {
         var dir = Path.Combine(DownloadDir, Path.GetFileNameWithoutExtension(zip));
         if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
         System.IO.Compression.ZipFile.ExtractToDirectory(zip, dir);
 
         var exes = Directory.GetFiles(dir, "*.exe", SearchOption.AllDirectories);
-        var setup = exes.FirstOrDefault(f => Path.GetFileName(f).Equals("AsusSetup.exe", StringComparison.OrdinalIgnoreCase))
-                    ?? exes.FirstOrDefault(f => Path.GetFileName(f).Equals("Setup.exe", StringComparison.OrdinalIgnoreCase))
+        string[] known = ["AsusSetup.exe", "Setup.exe", "Installer.exe"];
+        var setup = known.Select(k => exes.FirstOrDefault(f => Path.GetFileName(f).Equals(k, StringComparison.OrdinalIgnoreCase)))
+                         .FirstOrDefault(f => f is not null)
                     ?? (exes.Length == 1 ? exes[0] : null);
-        if (setup is null) return (null, "В архиве не найден установщик — откройте папку и установите вручную: " + dir);
+        if (setup is null)
+            return Directory.EnumerateFiles(dir, "*.inf", SearchOption.AllDirectories).Any()
+                ? (null, dir, null)
+                : (null, null, "В архиве не найден установщик — откройте папку и установите вручную: " + dir);
 
         // Внутри архива установщик может быть подписан не ASUS, а производителем чипа — проверяем только действительность.
         int trust = WinVerifyTrust(setup);
-        return trust == 0 ? (setup, null) : (null, $"Подпись установщика в архиве недействительна (0x{trust:X8})");
+        return trust == 0 ? (setup, null, null) : (null, null, $"Подпись установщика в архиве недействительна (0x{trust:X8})");
+    }
+
+    /// <summary>Ставит INF-драйверы из папки. Подпись пакета драйвера проверяет сама Windows.</summary>
+    private static async Task<(bool ok, string message)> InstallInfAsync(string dir)
+    {
+        var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "pnputil.exe"),
+            $"/add-driver \"{Path.Combine(dir, "*.inf")}\" /subdirs /install")
+        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
+        using var proc = Process.Start(psi);
+        if (proc is null) return (false, "Не удалось запустить pnputil");
+        var output = await proc.StandardOutput.ReadToEndAsync();
+        await proc.WaitForExitAsync();
+        // 0 — установлено, 3010 — установлено, нужна перезагрузка, 259 — новее уже стоит / не к чему применить.
+        return proc.ExitCode switch
+        {
+            0 => (true, "Драйвер установлен"),
+            3010 => (true, "Драйвер установлен, нужна перезагрузка"),
+            259 => (false, "Windows не применила драйвер: устройство не подошло или уже стоит версия новее"),
+            _ => (false, $"pnputil завершился с кодом {proc.ExitCode}: " +
+                         output.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault()?.Trim())
+        };
     }
 
     /// <summary>

@@ -26,7 +26,9 @@ public static class VendorSources
     /// Создаются заново на каждый скан — некоторые кэшируют каталог.
     /// </summary>
     public static IReadOnlyList<IVendorSource> Create() =>
-        [new AsusSource(), new LenovoSource(), new HpSource(), new DellSource(), new NvidiaSource(), new AmdSource(), new IntelSource()];
+        [new AsusSource(), new LenovoSource(), new HpSource(), new DellSource(),
+         HonorHuaweiSource.ForHonor(), HonorHuaweiSource.ForHuawei(),
+         new NvidiaSource(), new AmdSource(), new IntelSource()];
 
     /// <summary>
     /// Устройство подходит под ID из каталога: точное совпадение с Hardware/Compatible ID или более общий ID
