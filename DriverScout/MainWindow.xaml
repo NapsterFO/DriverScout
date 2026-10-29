@@ -112,7 +112,11 @@
         <!-- Заголовок -->
         <Grid>
             <StackPanel>
-                <TextBlock Text="DriverScout" Style="{StaticResource LargeTitle}"/>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="DriverScout" Style="{StaticResource LargeTitle}"/>
+                    <TextBlock Text="by Napster" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"
+                               VerticalAlignment="Bottom" Margin="10,0,0,6"/>
+                </StackPanel>
                 <TextBlock x:Name="SubtitleText" Text="Драйверы этого компьютера" Style="{StaticResource Subhead}" Margin="0,2,0,0"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
