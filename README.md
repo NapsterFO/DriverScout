@@ -14,6 +14,7 @@
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4?logo=dotnet">
   <img alt="WPF" src="https://img.shields.io/badge/UI-WPF-FF7A00">
   <img alt="x64" src="https://img.shields.io/badge/arch-x64-808080">
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
 </p>
 
 <p align="center">
@@ -116,3 +117,8 @@ DriverScout/
 - Сайты Intel, MSI, Acer и Gigabyte закрывают списки драйверов от программ — для них только ссылка.
 - Установщики производителей запускаются в интерактивном режиме, а не тихо.
 - Только Windows x64.
+
+## Лицензия
+
+[MIT](LICENSE) — можно свободно использовать, изменять и распространять с сохранением уведомления об авторских правах.
+Драйверы скачиваются с сайтов производителей и распространяются на их условиях.
