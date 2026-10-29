@@ -115,13 +115,17 @@
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="DriverScout" Style="{StaticResource LargeTitle}"/>
                     <TextBlock Text="by Napster" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"
-                               VerticalAlignment="Bottom" Margin="10,0,0,6"/>
+                               VerticalAlignment="Bottom" Margin="10,0,0,6" Cursor="Hand" ToolTip="О программе"
+                               MouseLeftButtonUp="About_Click"/>
                 </StackPanel>
                 <TextBlock x:Name="SubtitleText" Text="Драйверы этого компьютера" Style="{StaticResource Subhead}" Margin="0,2,0,0"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                 <Button x:Name="AdminButton" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Click="Admin_Click"
                         Content="Запустить от администратора"/>
+                <Button x:Name="SdiButton" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Click="Sdi_Click"
+                        Content="Драйверпаки SDIO"
+                        ToolTip="Скачать или обновить индексы драйверпаков Snappy Driver Installer Origin (~25 МБ, торрент)"/>
                 <Button x:Name="ScanButton" Style="{StaticResource OutlineButton}" Click="Scan_Click" Content="Сканировать"/>
             </StackPanel>
         </Grid>

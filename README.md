@@ -6,7 +6,7 @@
 
 <p align="center">
   Находит устройства без драйверов и устаревшие драйверы в Windows и ставит свежие версии —<br>
-  только из официальных источников: Windows Update и сайтов производителей.
+  из Windows Update, с сайтов производителей и, по желанию, из драйверпаков Snappy Driver Installer Origin.
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4?logo=dotnet">
   <img alt="WPF" src="https://img.shields.io/badge/UI-WPF-FF7A00">
   <img alt="x64" src="https://img.shields.io/badge/arch-x64-808080">
-  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-2EA043"></a>
+  <a href="LICENSE"><img alt="GPLv3" src="https://img.shields.io/badge/license-GPLv3-2EA043"></a>
 </p>
 
 <p align="center">
@@ -27,6 +27,7 @@
 - **Windows Update** — драйверы, проверенные Microsoft, ставятся автоматически.
 - **Официальные каталоги производителей ноутбуков** — ASUS, Lenovo, HP, Dell (драйвер подбирается по Hardware ID и модели компьютера), Honor и Huawei (по модели и названию пакета).
 - **Видеокарты** — свежие драйверы NVIDIA и AMD с сайтов производителей.
+- **Драйверпаки SDIO** (по кнопке «Драйверпаки SDIO») — для устройств, которым ничего не нашлось в официальных источниках. Алгоритм подбора перенесён из Snappy Driver Installer Origin: ранг совпадения Hardware ID, подпись каталога, декорации секций INF под версию Windows. По торренту скачиваются индексы (~25 МБ), а сами паки — только для выбранных драйверов.
 - **Около 30 брендов ноутбуков** распознаются по SMBIOS: MSI, Acer, Gigabyte, Huawei, Honor, Xiaomi, Samsung, Razer, Fujitsu и другие. Для тех, кого нельзя проверить автоматически, — ссылка на страницу драйверов и фирменная утилита.
 - **Безопасность установки**
   - точка восстановления Windows перед установкой;
@@ -46,6 +47,7 @@
 | Honor, Huawei | API сайта поддержки по коду модели; пакет подбирается по названию («IntelWLAN 22.190.0.4») — к установке не отмечается автоматически |
 | NVIDIA | API GeForce Experience по Device ID |
 | AMD | страницы продуктов amd.com |
+| Драйверпаки SDIO | индексы `indexes/SDIO/*.bin` из раздачи `SDIO_Update.torrent`; установка через `UpdateDriverForPlugAndPlayDevices`, подпись проверяет Windows. Сторонняя сборка — к установке не отмечается автоматически |
 | Intel, MSI, Acer, Gigabyte, Razer, Fujitsu и др. | ссылка на страницу драйверов — их сайты не отдают список программам или драйверы есть только в фирменной утилите |
 
 ## Установка
@@ -108,6 +110,7 @@ DriverScout/
 ├─ VendorInstaller.cs       загрузка, проверка подписи и SHA-256, запуск установщика
 ├─ OemBrands.cs             справочник брендов ноутбуков
 ├─ ScanService.cs           сборка результатов и отчёт
+├─ Sdi/                     драйверпаки SDIO: индексы, подбор, торрент, установка (порт кода SDIO)
 ├─ MainWindow.xaml, Theme.xaml, ThemedDialog.xaml   интерфейс
 ├─ installer/               Inno Setup, build.ps1, sign.ps1
 └─ tools/IconGen.cs         генератор иконки
@@ -117,10 +120,19 @@ DriverScout/
 
 - Сайты Intel, MSI, Acer, Gigabyte, Razer и Fujitsu закрывают списки драйверов от программ — для них только ссылка.
 - Honor и Huawei не публикуют Hardware ID и контрольные суммы: драйвер подбирается по названию, архив проверяется подписью установщика внутри или самой Windows (INF через `pnputil`).
+- Драйверпаки SDIO — сторонняя сборка драйверов, а не сайты производителей. Загрузка идёт по торренту: первые минуты уходят на поиск пиров, паки весят от мегабайт до нескольких гигабайт. Индексировать собственные паки, как SDIO, DriverScout пока не умеет — только готовые индексы из раздачи.
 - Установщики производителей запускаются в интерактивном режиме, а не тихо.
 - Только Windows x64.
 
 ## Лицензия
 
-[MIT](LICENSE) — можно свободно использовать, изменять и распространять с сохранением уведомления об авторских правах.
-Драйверы скачиваются с сайтов производителей и распространяются на их условиях.
+[GNU GPL v3](LICENSE) — можно свободно использовать, изменять и распространять; производные работы и распространяемые сборки
+должны выходить под той же лицензией вместе с исходным кодом.
+
+Copyright © 2026 NapsterFO. Модуль драйверпаков (`DriverScout/Sdi/`) — переработка кода
+[Snappy Driver Installer Origin](https://www.glenn.delahoy.com/snappy-driver-installer-origin/)
+(© Glenn Delahoy, © BadPointer и другие авторы SDI/SDIO, GPLv3).
+Распаковка LZMA86/x86 BCJ — по алгоритмам LZMA SDK (общественное достояние).
+Библиотеки: [SharpCompress](https://github.com/adamhathcock/sharpcompress) (MIT), [MonoTorrent](https://github.com/alanmcgovern/monotorrent) (MIT).
+
+Драйверы скачиваются с сайтов производителей и из драйверпаков SDIO и распространяются на условиях их правообладателей.

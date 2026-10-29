@@ -28,7 +28,8 @@ public sealed class DeviceInfo
 public enum DriverKind
 {
     WindowsUpdate, // ставится через Windows Update Agent
-    Installer      // .exe-установщик с сайта производителя
+    Installer,     // .exe-установщик с сайта производителя
+    DriverPack     // INF из драйверпака SDIO
 }
 
 /// <summary>Драйвер, найденный в одном из источников.</summary>
@@ -48,6 +49,12 @@ public sealed class DriverUpdate
     /// Установщик внутри всё равно проверяется по цифровой подписи, драйверы INF — самой Windows.
     /// </summary>
     public bool TrustArchiveFromVendor { get; init; }
+
+    // Только для Kind == DriverPack.
+    /// <summary>Драйверпак SDIO без расширения: "DP_Chipset_26082".</summary>
+    public string? PackName { get; init; }
+    /// <summary>Путь к INF внутри драйверпака: "AMD\FORCED\Audio\10x64\ACP_6.0.2.118\amdacpbus.inf".</summary>
+    public string? PackInf { get; init; }
     /// <summary>Подпись .exe должна принадлежать этой компании, иначе не запускаем.</summary>
     public string? ExpectedSigner { get; init; }
     /// <summary>Контрольная сумма от производителя, если он её публикует (ASUS).</summary>

@@ -56,11 +56,27 @@ public sealed class ScanService
                 vendor[dev] = chosen ?? new VendorResult(null, page);
         }
 
-        return Match(devices, updates, vendor);
+        // Драйверпаки SDIO — последним: только для устройств, которым ничего не нашлось в официальных источниках.
+        var sdi = new Dictionary<DeviceInfo, DriverUpdate>();
+        if (Sdi.SdiService.HasIndexes)
+        {
+            try
+            {
+                var rest = devices.Where(d => vendor.GetValueOrDefault(d)?.Update is null && FindUpdate(d, updates) is null).ToList();
+                sdi = Sdi.SdiService.Match(rest, system, progress);
+            }
+            catch (Exception ex)
+            {
+                _errors.Add("SDIO: " + ex.Message);
+            }
+        }
+
+        return Match(devices, updates, vendor, sdi);
     }
 
     public static List<DriverRow> Match(List<DeviceInfo> devices, List<DriverUpdate> updates,
-                                        Dictionary<DeviceInfo, VendorResult> vendor)
+                                        Dictionary<DeviceInfo, VendorResult> vendor,
+                                        Dictionary<DeviceInfo, DriverUpdate>? sdi = null)
     {
         var rows = new List<DriverRow>();
         var used = new HashSet<DriverUpdate>();
@@ -71,7 +87,7 @@ public sealed class ScanService
             if (wu is not null) used.Add(wu);
             var vr = vendor.GetValueOrDefault(dev);
             // Драйвер с сайта производителя проверен как более новый — он важнее Windows Update.
-            var upd = vr?.Update ?? wu;
+            var upd = vr?.Update ?? wu ?? sdi?.GetValueOrDefault(dev);
 
             var status = dev.IsMissingDriver ? RowStatus.Missing
                        : upd is not null ? RowStatus.Update

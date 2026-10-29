@@ -133,10 +133,15 @@ public partial class MainWindow : Window
         }
 
         int installers = selected.Count(r => r.Update!.Kind == DriverKind.Installer);
+        var packRows = selected.Where(r => r.Update!.Kind == DriverKind.DriverPack).ToList();
         var message = $"Будет установлено драйверов: {selected.Count}.\n\n" +
                       (installers > 0
                           ? $"{installers} из них — установщики с сайта производителя. Они откроются в своём окне, " +
                             "там нужно будет принять лицензию.\n\n"
+                          : "") +
+                      (packRows.Count > 0
+                          ? $"{packRows.Count} — из драйверпаков SDIO. Это сторонние сборки драйверов, их архивы " +
+                            "скачаются торрентом и могут весить сотни мегабайт.\n\n"
                           : "") +
                       "Перед установкой создадим точку восстановления.";
         if (!ThemedDialog.Ask(this, "Установка драйверов", message, "Установить")) return;
@@ -152,6 +157,24 @@ public partial class MainWindow : Window
 
             bool reboot = false;
             int done = 0, failed = 0;
+
+            // Драйверпаки качаем заранее и одной раздачей: поиск пиров торрента занимает минуты.
+            if (packRows.Count > 0)
+            {
+                try
+                {
+                    var packProgress = new Progress<string>(m => StatusText.Text = m);
+                    await Task.Run(() => Sdi.SdiService.DownloadPacksAsync(packRows.Select(r => r.Update!),
+                        ((IProgress<string>)packProgress).Report, CancellationToken.None));
+                }
+                catch (Exception ex)
+                {
+                    foreach (var r in packRows) r.Result = "Не скачался драйверпак: " + ex.Message;
+                    failed += packRows.Count;
+                    selected = selected.Except(packRows).ToList();
+                }
+            }
+
             foreach (var row in selected)
             {
                 StatusText.Text = $"Устанавливаю {done + failed + 1} из {selected.Count}: {row.Name}";
@@ -165,6 +188,14 @@ public partial class MainWindow : Window
                         string msg;
                         (ok, msg) = await Task.Run(() => VendorInstaller.DownloadAndRunAsync(row.Update, ((IProgress<string>)progress).Report));
                         row.Result = msg;
+                    }
+                    else if (row.Update.Kind == DriverKind.DriverPack)
+                    {
+                        var progress = new Progress<string>(m => row.Result = m);
+                        var (packOk, rb, msg) = await Task.Run(() => Sdi.SdiService.Install(row.Update, ((IProgress<string>)progress).Report));
+                        ok = packOk;
+                        row.Result = msg;
+                        reboot |= rb;
                     }
                     else if (_scan?.WindowsUpdate is { } wu)
                     {
@@ -197,6 +228,34 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void Sdi_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ThemedDialog.Ask(this, "Драйверпаки SDIO",
+                "DriverScout умеет подбирать драйверы из драйверпаков Snappy Driver Installer Origin — " +
+                "это большая коллекция драйверов, собранная сообществом (не с сайтов производителей).\n\n" +
+                "Сейчас скачаются только индексы паков (~25 МБ) через торрент — это может занять несколько минут. " +
+                "Сами драйверпаки будут скачиваться только для тех драйверов, которые вы выберете к установке.",
+                Sdi.SdiService.HasIndexes ? "Обновить индексы" : "Скачать индексы"))
+            return;
+
+        SetBusy(true);
+        try
+        {
+            var progress = new Progress<string>(m => StatusText.Text = m);
+            await Task.Run(() => Sdi.SdiService.DownloadIndexesAsync(((IProgress<string>)progress).Report, CancellationToken.None));
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "Не удалось скачать индексы SDIO: " + ex.Message;
+            return;
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+        Scan_Click(sender, e);
+    }
+
     private void Report_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new SaveFileDialog
@@ -207,6 +266,17 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog(this) == true)
             File.WriteAllText(dlg.FileName, ScanService.BuildReport(_rows, _scan?.SourceError, _scan?.Oem));
     }
+
+    /// <summary>Уведомление о лицензии, которое GPLv3 требует показывать в интерактивных программах.</summary>
+    private void About_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) =>
+        ThemedDialog.Info(this, "О программе",
+            $"DriverScout {typeof(MainWindow).Assembly.GetName().Version?.ToString(3)} by Napster\n" +
+            "Copyright © 2026 NapsterFO\n\n" +
+            "Модуль драйверпаков основан на коде Snappy Driver Installer Origin " +
+            "(© Glenn Delahoy, © BadPointer и другие авторы SDI/SDIO).\n\n" +
+            "Это свободная программа: её можно распространять и изменять на условиях GNU General Public License " +
+            "версии 3. Программа поставляется БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ.\n\n" +
+            "Исходный код: https://github.com/NapsterFO/DriverScout");
 
     private void Admin_Click(object sender, RoutedEventArgs e)
     {
@@ -225,6 +295,7 @@ public partial class MainWindow : Window
         _busy = busy;
         Progress.Visibility = busy ? Visibility.Visible : Visibility.Hidden;
         ScanButton.IsEnabled = !busy;
+        SdiButton.IsEnabled = !busy;
         DeviceList.IsEnabled = !busy;
         UpdateInstallButton();
     }
