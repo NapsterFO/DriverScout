@@ -1,0 +1,30 @@
+<Window x:Class="DriverScout.ThemedDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize"
+        SizeToContent="Height" Width="480" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        FontFamily="{StaticResource AppFont}" UseLayoutRounding="True">
+    <!-- Как карточка «Movie Quiz +»: оранжевый заголовок, крестик, кнопки внизу -->
+    <Border Background="{StaticResource Surface2Brush}" CornerRadius="20" Padding="24,20,24,24" Margin="12"
+            BorderBrush="{StaticResource DividerBrush}" BorderThickness="1" MouseLeftButtonDown="Header_MouseDown">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.6" Color="Black"/>
+        </Border.Effect>
+        <StackPanel>
+            <Grid>
+                <TextBlock x:Name="TitleText" Style="{StaticResource Title2}" Foreground="{StaticResource AccentBrush}"
+                           TextWrapping="Wrap" Margin="0,0,40,0" VerticalAlignment="Center"/>
+                <Button Style="{StaticResource CloseButton}" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        IsCancel="True" Click="Cancel_Click"/>
+            </Grid>
+            <TextBlock x:Name="MessageText" Style="{StaticResource TextBase}" FontSize="15" TextWrapping="Wrap"
+                       TextTrimming="None" LineHeight="21" Margin="0,14,0,0"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+                <Button x:Name="CancelButton" Style="{StaticResource SecondaryButton}" Content="Отмена"
+                        Margin="0,0,10,0" Click="Cancel_Click"/>
+                <Button x:Name="OkButton" Style="{StaticResource PrimaryButton}" IsDefault="True" MinWidth="140"
+                        Click="Ok_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

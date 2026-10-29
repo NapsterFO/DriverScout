@@ -1,0 +1,200 @@
+﻿<Window x:Class="DriverScout.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DriverScout"
+        Title="DriverScout" Icon="Assets/app.ico" Height="820" Width="1180" MinWidth="1080" MinHeight="620"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgBrush}" FontFamily="{StaticResource AppFont}"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <Style x:Key="CardItem" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="0,0,8,10"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Карточка устройства: как карточка «title / date / time» из дизайн-системы -->
+        <DataTemplate x:Key="DeviceCard" DataType="{x:Type local:DriverRow}">
+            <Border x:Name="Card" Background="{StaticResource SurfaceBrush}" CornerRadius="16" Padding="18,14"
+                    BorderBrush="Transparent" BorderThickness="1.5">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <CheckBox x:Name="Check" Style="{StaticResource AccentCheckBox}" VerticalAlignment="Center" Margin="0,0,18,0"
+                              IsEnabled="{Binding CanInstall}"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" Style="{StaticResource Headline}" ToolTip="{Binding HardwareId}"/>
+                        <WrapPanel Margin="0,8,0,0">
+                            <Border x:Name="StatusChip" Style="{StaticResource ChipFilled}">
+                                <TextBlock Text="{Binding ChipText}" Style="{StaticResource ChipText}" Foreground="White"/>
+                            </Border>
+                            <Border x:Name="ClassChip" Style="{StaticResource ChipMuted}">
+                                <TextBlock Text="{Binding DeviceClass}" Style="{StaticResource ChipText}"/>
+                            </Border>
+                            <Border x:Name="SourceChip" Style="{StaticResource ChipOutline}">
+                                <TextBlock Text="{Binding Source}" Style="{StaticResource ChipText}" Foreground="{StaticResource AccentBrush}"/>
+                            </Border>
+                            <TextBlock x:Name="SiteLink" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="4,0,0,0">
+                                <Hyperlink NavigateUri="{Binding VendorPage}" RequestNavigate="Link_Navigate"
+                                           ToolTip="{Binding VendorPage}">сайт производителя</Hyperlink>
+                            </TextBlock>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Result}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"
+                                   Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Visibility="{Binding HasResult, Converter={StaticResource BoolToVis}}"/>
+                    </StackPanel>
+
+                    <!-- Версии: «установлено» и «доступно», как time в углу карточки -->
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="24,0,0,0" MinWidth="210">
+                        <TextBlock Text="установлено" Style="{StaticResource Caption}" HorizontalAlignment="Right"/>
+                        <TextBlock Text="{Binding Current}" Style="{StaticResource Subhead}" Foreground="{StaticResource TextBrush}"
+                                   HorizontalAlignment="Right"/>
+                        <StackPanel x:Name="AvailablePanel" Margin="0,6,0,0">
+                            <TextBlock Text="доступно" Style="{StaticResource Caption}" HorizontalAlignment="Right"/>
+                            <TextBlock Text="{Binding Available}" Style="{StaticResource Headline}" FontSize="15"
+                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Right"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsAttention}" Value="True">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static local:RowStatus.Problem}">
+                    <Setter TargetName="StatusChip" Property="Background" Value="{StaticResource DisabledBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static local:RowStatus.UpToDate}">
+                    <Setter TargetName="StatusChip" Property="Background" Value="{StaticResource Surface2Brush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsOlderThanInstalled}" Value="True">
+                    <Setter TargetName="StatusChip" Property="Background" Value="{StaticResource DisabledBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding CanInstall}" Value="False">
+                    <Setter TargetName="Check" Property="Visibility" Value="Hidden"/>
+                    <Setter TargetName="AvailablePanel" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="SourceChip" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding DeviceClass}" Value="{x:Null}">
+                    <Setter TargetName="ClassChip" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding VendorPage}" Value="{x:Null}">
+                    <Setter TargetName="SiteLink" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="32,24,32,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Заголовок -->
+        <Grid>
+            <StackPanel>
+                <TextBlock Text="DriverScout" Style="{StaticResource LargeTitle}"/>
+                <TextBlock x:Name="SubtitleText" Text="Драйверы этого компьютера" Style="{StaticResource Subhead}" Margin="0,2,0,0"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button x:Name="AdminButton" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Click="Admin_Click"
+                        Content="Запустить от администратора"/>
+                <Button x:Name="ScanButton" Style="{StaticResource OutlineButton}" Click="Scan_Click" Content="Сканировать"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Фильтры-счётчики и карточка производителя -->
+        <Grid Grid.Row="1" Margin="0,24,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <UniformGrid Rows="1" VerticalAlignment="Stretch">
+                <RadioButton x:Name="FilterAttention" Style="{StaticResource StatCard}" Tag="–" IsChecked="True"
+                             Content="внимание" Checked="Filter_Changed"/>
+                <RadioButton x:Name="FilterMissing" Style="{StaticResource StatCard}" Tag="–" Content="нет драйвера" Checked="Filter_Changed"/>
+                <RadioButton x:Name="FilterUpdate" Style="{StaticResource StatCard}" Tag="–" Content="обновления" Checked="Filter_Changed"/>
+                <RadioButton x:Name="FilterProblem" Style="{StaticResource StatCard}" Tag="–" Content="ошибки" Checked="Filter_Changed"/>
+                <RadioButton x:Name="FilterAll" Style="{StaticResource StatCard}" Tag="–" Content="все устройства" Checked="Filter_Changed"/>
+            </UniformGrid>
+
+            <Border x:Name="OemCard" Grid.Column="1" Width="330" Background="{StaticResource SurfaceBrush}" CornerRadius="16"
+                    Padding="16,12" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1.5" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <Border Style="{StaticResource ChipOutline}">
+                            <TextBlock Text="производитель" Style="{StaticResource ChipText}"/>
+                        </Border>
+                        <Border x:Name="OemAutoChip" Style="{StaticResource ChipFilled}">
+                            <TextBlock Text="авто-проверка" Style="{StaticResource ChipText}" Foreground="White"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock x:Name="OemTitle" Grid.Row="1" Style="{StaticResource Headline}" Margin="0,8,0,0"/>
+                    <TextBlock Grid.Row="2" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap">
+                        <Run x:Name="OemUtility"/>
+                        <Hyperlink x:Name="OemLink" RequestNavigate="Link_Navigate">страница драйверов →</Hyperlink>
+                    </TextBlock>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <ProgressBar x:Name="Progress" Grid.Row="2" Style="{StaticResource AccentProgress}" Margin="0,18,0,0" Visibility="Hidden"/>
+
+        <!-- Список устройств -->
+        <Grid Grid.Row="3" Margin="0,14,0,0">
+            <ListBox x:Name="DeviceList" Background="Transparent" BorderThickness="0"
+                     ItemTemplate="{StaticResource DeviceCard}" ItemContainerStyle="{StaticResource CardItem}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.IsVirtualizing="True">
+                <!-- Свой шаблон: у стандартного при IsEnabled=False белая заливка -->
+                <ListBox.Template>
+                    <ControlTemplate TargetType="ListBox">
+                        <ScrollViewer Focusable="False" CanContentScroll="True">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ListBox.Template>
+            </ListBox>
+            <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="EmptyTitle" Text="Сканирую…" Style="{StaticResource Title2}" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="EmptySubtitle" Text="Ищу устройства и драйверы — это займёт около минуты"
+                           Style="{StaticResource Subhead}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Нижняя панель -->
+        <Grid Grid.Row="4" Margin="0,14,0,0">
+            <TextBlock x:Name="StatusText" Style="{StaticResource Subhead}" VerticalAlignment="Center" Margin="0,0,320,0"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="ReportButton" Style="{StaticResource SecondaryButton}" Content="Сохранить отчёт"
+                        Margin="0,0,10,0" IsEnabled="False" Click="Report_Click"/>
+                <Button x:Name="InstallButton" Style="{StaticResource PrimaryButton}" Content="Установить выбранное"
+                        MinWidth="240" IsEnabled="False" Click="Install_Click"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
