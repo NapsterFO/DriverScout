@@ -3,6 +3,7 @@
 
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using SharpCompress.Archives.SevenZip;
 using SharpCompress.Readers;
 
@@ -20,7 +21,74 @@ public static class SdiService
                 .FirstOrDefault(d => Directory.Exists(d) && Directory.EnumerateFiles(d, "*.bin").Any())
             : null;
 
-    public static bool HasIndexes => IndexDir is not null;
+    /// <summary>
+    /// Встроенные в установщик сетевые драйверпаки ({app}\Drivers\indexes и \drivers): без драйвера сетевой карты
+    /// интернета нет, а значит, нет ни Windows Update, ни торрента.
+    /// </summary>
+    public static string BundledDir { get; } = Path.Combine(AppContext.BaseDirectory, "Drivers");
+
+    /// <summary>Какие драйверпаки встраивать (имена без номера выпуска).</summary>
+    public static readonly string[] BundledFamilies = ["DP_LAN_Intel", "DP_LAN_Realtek-NT", "DP_LAN_Others"];
+
+    /// <summary>Есть индексы — скачанные или встроенные.</summary>
+    public static bool HasIndexes => IndexFiles().Count > 0;
+
+    /// <summary>
+    /// Индексы для подбора. Один пак может лежать и среди встроенных, и среди скачанных: берём тот, чей архив
+    /// уже на диске (чтобы ставить без интернета), а из них — самый свежий выпуск.
+    /// </summary>
+    private static List<string> IndexFiles()
+    {
+        var bundled = Path.Combine(BundledDir, "indexes");
+        var files = (IndexDir is { } dir ? Directory.GetFiles(dir, "*.bin") : [])
+            .Concat(Directory.Exists(bundled) ? Directory.GetFiles(bundled, "*.bin") : []);
+        return files.GroupBy(f => PackFamily(Path.GetFileNameWithoutExtension(f)), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(f => PackFile(Path.GetFileNameWithoutExtension(f)) is not null)
+                          .ThenByDescending(f => PackRelease(Path.GetFileNameWithoutExtension(f))).First())
+            .ToList();
+    }
+
+    /// <summary>"DP_LAN_Intel_26081" → "DP_LAN_Intel".</summary>
+    public static string PackFamily(string pack) => Regex.Replace(pack, @"_\d+$", "");
+    private static int PackRelease(string pack) =>
+        Regex.Match(pack, @"_(\d+)$") is { Success: true } m ? int.Parse(m.Groups[1].Value) : 0;
+
+    /// <summary>Архив драйверпака на диске: сначала встроенный, потом скачанный торрентом.</summary>
+    public static string? PackFile(string packName) =>
+        new[] { Path.Combine(BundledDir, "drivers") }
+            .Concat(Directory.Exists(SdiTorrent.Root)
+                ? Directory.EnumerateDirectories(SdiTorrent.Root).Select(d => Path.Combine(d, "drivers"))
+                : [])
+            .Select(d => Path.Combine(d, packName + ".7z")).FirstOrDefault(File.Exists);
+
+    private static bool IsBundled(string path) =>
+        path.StartsWith(BundledDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Для сборки установщика: скачивает встроенные сетевые драйверпаки с индексами и раскладывает в target
+    /// (target\indexes\*.bin, target\drivers\*.7z). Старые выпуски из target удаляются.
+    /// </summary>
+    public static async Task FetchBundledAsync(string target, Action<string> progress, CancellationToken ct)
+    {
+        progress("Подключаюсь к раздаче SDIO…");
+        await using var torrent = new SdiTorrent();
+        await torrent.OpenAsync();
+        bool Wanted(string p, string folder, string ext) =>
+            p.StartsWith(folder, StringComparison.OrdinalIgnoreCase) && p.EndsWith(ext, StringComparison.OrdinalIgnoreCase) &&
+            BundledFamilies.Contains(PackFamily(Path.GetFileNameWithoutExtension(p)), StringComparer.OrdinalIgnoreCase);
+        var files = torrent.Files.Where(p => Wanted(p, "indexes/SDIO/", ".bin") || Wanted(p, "drivers/", ".7z")).ToList();
+        if (files.Count != BundledFamilies.Length * 2)
+            throw new InvalidOperationException("В раздаче не нашлись все сетевые драйверпаки: " + string.Join(", ", files));
+        await torrent.DownloadAsync(files, (d, t) => progress(Percent("Скачиваю сетевые драйверпаки", d, t)), ct);
+
+        foreach (var sub in new[] { "indexes", "drivers" })
+        {
+            var dir = Directory.CreateDirectory(Path.Combine(target, sub)).FullName;
+            foreach (var old in Directory.GetFiles(dir)) File.Delete(old);
+        }
+        foreach (var p in files)
+            File.Copy(torrent.LocalPath(p), Path.Combine(target, p.StartsWith("drivers/") ? "drivers" : "indexes", Path.GetFileName(p)));
+    }
 
     /// <summary>Скачивает или обновляет индексы всех драйверпаков (~25 МБ), старые удаляет.</summary>
     public static async Task DownloadIndexesAsync(Action<string> progress, CancellationToken ct)
@@ -47,13 +115,13 @@ public static class SdiService
     public static Dictionary<DeviceInfo, DriverUpdate> Match(List<DeviceInfo> devices, SystemProfile sys, Action<string> progress)
     {
         var result = new Dictionary<DeviceInfo, DriverUpdate>();
-        var dir = IndexDir;
-        if (dir is null) return result;
+        var indexes = IndexFiles();
+        if (indexes.Count == 0) return result;
 
         progress("Читаю индексы драйверпаков SDIO…");
         var wanted = devices.SelectMany(d => d.HardwareIds.Concat(d.CompatibleIds))
             .Select(s => s.ToUpperInvariant()).ToHashSet();
-        var packs = Directory.GetFiles(dir, "*.bin").AsParallel()
+        var packs = indexes.AsParallel()
             .Select(f => { try { return SdiIndex.Load(f, wanted); } catch (InvalidDataException) { return null; } })
             .OfType<SdiIndex>().Where(p => p.Hwids.Count > 0).ToList();
 
@@ -62,8 +130,14 @@ public static class SdiService
         foreach (var d in devices.Where(d => d.HardwareIds.Length > 0))
         {
             var installed = InstalledDriver.Read(d);
-            var best = SdiMatcher.Pick(matcher.Match(d, installed, packs), d, installed);
+            var candidates = matcher.Match(d, installed, packs);
+            var best = SdiMatcher.Pick(candidates, d, installed);
+            // Без драйвера устройство может оказаться сетевой картой, а без неё нет интернета, чтобы скачать пак, —
+            // поэтому драйвер из пака на диске (встроенного) важнее чуть более свежего из пака, которого нет.
+            if (d.IsMissingDriver && best is not null && PackFile(best.Pack.PackName) is null)
+                best = SdiMatcher.Pick(candidates.Where(c => PackFile(c.Pack.PackName) is not null).ToList(), d, installed) ?? best;
             if (best is null) continue;
+            bool bundled = PackFile(best.Pack.PackName) is { } file && IsBundled(file);
             result[d] = new DriverUpdate
             {
                 Title = $"SDIO: {best.Description} {best.Version}",
@@ -75,7 +149,12 @@ public static class SdiService
                 Manufacturer = best.Provider,
                 PackName = best.Pack.PackName,
                 PackInf = best.Inf.Path + best.Inf.Name,
-                Note = $"Драйвер из драйверпака SDIO ({best.Pack.PackName}) — сторонняя сборка, не с сайта производителя"
+                Bundled = bundled,
+                // Сетевой карте без драйвера ставим встроенный сразу: иначе не будет интернета и для остального.
+                AutoSelect = bundled && d.IsMissingDriver,
+                Note = bundled
+                    ? $"Встроенный сетевой драйвер из драйверпака SDIO ({best.Pack.PackName}) — ставится без интернета; сторонняя сборка, не с сайта производителя"
+                    : $"Драйвер из драйверпака SDIO ({best.Pack.PackName}) — сторонняя сборка, не с сайта производителя"
             };
         }
         return result;
@@ -84,8 +163,9 @@ public static class SdiService
     /// <summary>Скачивает драйверпаки для выбранных драйверов одной раздачей (поиск пиров занимает время).</summary>
     public static async Task DownloadPacksAsync(IEnumerable<DriverUpdate> updates, Action<string> progress, CancellationToken ct)
     {
-        var packs = updates.Select(u => $"drivers/{u.PackName}.7z").Distinct().ToList();
-        if (packs.Count == 0) return;
+        var packs = updates.Where(u => PackFile(u.PackName!) is null)
+            .Select(u => $"drivers/{u.PackName}.7z").Distinct().ToList();
+        if (packs.Count == 0) return; // всё уже на диске — встроено или скачано раньше
         progress("Подключаюсь к раздаче SDIO…");
         await using var torrent = new SdiTorrent();
         await torrent.OpenAsync();
@@ -98,8 +178,7 @@ public static class SdiService
     /// <summary>Распаковывает папку INF из драйверпака и ставит драйвер для устройства (как SDIO, с INSTALLFLAG_FORCE).</summary>
     public static (bool ok, bool reboot, string message) Install(DriverUpdate update, Action<string> progress)
     {
-        var pack = Directory.EnumerateDirectories(SdiTorrent.Root)
-            .Select(d => Path.Combine(d, "drivers", update.PackName + ".7z")).FirstOrDefault(File.Exists);
+        var pack = PackFile(update.PackName!);
         if (pack is null) return (false, false, "Драйверпак не скачан");
 
         var infDir = Path.GetDirectoryName(update.PackInf!)!.Replace('/', '\\').TrimEnd('\\') + "\\";

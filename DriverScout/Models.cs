@@ -55,6 +55,10 @@ public sealed class DriverUpdate
     public string? PackName { get; init; }
     /// <summary>Путь к INF внутри драйверпака: "AMD\FORCED\Audio\10x64\ACP_6.0.2.118\amdacpbus.inf".</summary>
     public string? PackInf { get; init; }
+    /// <summary>Драйверпак встроен в DriverScout (сетевые драйверы) — ставится без интернета.</summary>
+    public bool Bundled { get; init; }
+    /// <summary>Отметить к установке, несмотря на примечание: встроенный драйвер для сетевой карты без драйвера.</summary>
+    public bool AutoSelect { get; init; }
     /// <summary>Подпись .exe должна принадлежать этой компании, иначе не запускаем.</summary>
     public string? ExpectedSigner { get; init; }
     /// <summary>Контрольная сумма от производителя, если он её публикует (ASUS).</summary>

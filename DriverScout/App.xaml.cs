@@ -20,6 +20,26 @@ public partial class App : Application
             return;
         }
 
+        // Для сборки установщика: DriverScout.exe --fetch-lan папка — скачивает встроенные сетевые драйверпаки.
+        if (e.Args.Length >= 2 && e.Args[0] == "--fetch-lan")
+        {
+            var log = Path.Combine(e.Args[1], "fetch.log");
+            Directory.CreateDirectory(e.Args[1]);
+            try
+            {
+                Task.Run(() => Sdi.SdiService.FetchBundledAsync(e.Args[1], m => File.WriteAllText(log, m), CancellationToken.None))
+                    .GetAwaiter().GetResult();
+                File.Delete(log);
+                Shutdown(0);
+            }
+            catch (Exception ex)
+            {
+                File.WriteAllText(log, ex.ToString());
+                Shutdown(1);
+            }
+            return;
+        }
+
         new MainWindow().Show();
     }
 }

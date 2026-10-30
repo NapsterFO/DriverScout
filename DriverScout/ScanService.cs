@@ -57,6 +57,7 @@ public sealed class ScanService
         }
 
         // Драйверпаки SDIO — последним: только для устройств, которым ничего не нашлось в официальных источниках.
+        // Сетевые паки встроены в программу, поэтому этот шаг работает и без интернета.
         var sdi = new Dictionary<DeviceInfo, DriverUpdate>();
         if (Sdi.SdiService.HasIndexes)
         {
@@ -107,7 +108,7 @@ public sealed class ScanService
                 Result = upd?.Note
                          ?? (status == RowStatus.Missing ? "Драйвер не найден ни в Windows Update, ни у производителей" : "")
             };
-            row.IsSelected = upd is not null && !row.IsOlderThanInstalled && upd.Note is null;
+            row.IsSelected = upd is not null && !row.IsOlderThanInstalled && (upd.Note is null || upd.AutoSelect);
             rows.Add(row);
         }
 

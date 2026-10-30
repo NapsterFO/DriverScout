@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     private ScanService? _scan;
     private ICollectionView? _view;
     private bool _busy;
+    private bool _lanOffered;
 
     public MainWindow()
     {
@@ -54,11 +55,45 @@ public partial class MainWindow : Window
         {
             ShowEmpty("Не получилось просканировать", ex.Message);
             StatusText.Text = "";
+            return;
         }
         finally
         {
             SetBusy(false);
         }
+        await OfferBundledLan();
+    }
+
+    /// <summary>
+    /// Сетевая карта без драйвера — значит, нет интернета и для всего остального.
+    /// Встроенный драйвер предлагаем поставить сразу после сканирования, один раз за запуск.
+    /// </summary>
+    private async Task OfferBundledLan()
+    {
+        if (_lanOffered) return;
+        var lan = _rows.Where(r => r.Status == RowStatus.Missing && r.Update is { Bundled: true, AutoSelect: true }).ToList();
+        if (lan.Count == 0) return;
+        _lanOffered = true;
+
+        var text = "Без драйвера: " + string.Join(", ", lan.Select(r => r.Name)) + ".\n\n" +
+                   "В DriverScout встроены сетевые драйверы из драйверпаков SDIO — они ставятся без интернета. " +
+                   "Это сторонние сборки, не с сайта производителя.";
+        if (!SystemTools.IsAdmin())
+        {
+            if (ThemedDialog.Ask(this, "Нет драйвера сетевой карты",
+                    text + "\n\nДрайверы может устанавливать только администратор. Перезапустить DriverScout с правами администратора?",
+                    "Перезапустить"))
+                Admin_Click(this, new RoutedEventArgs());
+            return;
+        }
+        if (!ThemedDialog.Ask(this, "Нет драйвера сетевой карты",
+                text + "\n\nУстановить сейчас? Перед установкой создадим точку восстановления.", "Установить"))
+            return;
+
+        await InstallAsync(lan);
+        if (lan.Any(r => !r.IsSelected)) // установленные строки снимаются с выбора
+            ThemedDialog.Info(this, "Сетевой драйвер установлен",
+                "Когда появится интернет, нажмите «Сканировать» — DriverScout найдёт остальные драйверы.");
     }
 
     private bool MatchesFilter(DriverRow r)
@@ -133,19 +168,29 @@ public partial class MainWindow : Window
         }
 
         int installers = selected.Count(r => r.Update!.Kind == DriverKind.Installer);
-        var packRows = selected.Where(r => r.Update!.Kind == DriverKind.DriverPack).ToList();
+        int toDownload = selected.Count(r => r.Update!.Kind == DriverKind.DriverPack && Sdi.SdiService.PackFile(r.Update.PackName!) is null);
+        int local = selected.Count(r => r.Update!.Kind == DriverKind.DriverPack) - toDownload;
         var message = $"Будет установлено драйверов: {selected.Count}.\n\n" +
                       (installers > 0
                           ? $"{installers} из них — установщики с сайта производителя. Они откроются в своём окне, " +
                             "там нужно будет принять лицензию.\n\n"
                           : "") +
-                      (packRows.Count > 0
-                          ? $"{packRows.Count} — из драйверпаков SDIO. Это сторонние сборки драйверов, их архивы " +
+                      (toDownload > 0
+                          ? $"{toDownload} — из драйверпаков SDIO. Это сторонние сборки драйверов, их архивы " +
                             "скачаются торрентом и могут весить сотни мегабайт.\n\n"
+                          : "") +
+                      (local > 0
+                          ? $"{local} — из драйверпаков SDIO, которые уже на диске (сетевые встроены в программу). " +
+                            "Это сторонние сборки драйверов, интернет для них не нужен.\n\n"
                           : "") +
                       "Перед установкой создадим точку восстановления.";
         if (!ThemedDialog.Ask(this, "Установка драйверов", message, "Установить")) return;
+        await InstallAsync(selected);
+    }
 
+    private async Task InstallAsync(List<DriverRow> selected)
+    {
+        var packRows = selected.Where(r => r.Update!.Kind == DriverKind.DriverPack).ToList();
         SetBusy(true);
         try
         {
@@ -192,7 +237,7 @@ public partial class MainWindow : Window
                     else if (row.Update.Kind == DriverKind.DriverPack)
                     {
                         var progress = new Progress<string>(m => row.Result = m);
-                        var (packOk, rb, msg) = await Task.Run(() => Sdi.SdiService.Install(row.Update, ((IProgress<string>)progress).Report));
+                        var (packOk, rb, msg) = await Task.Run(() => Sdi.SdiService.Install(row.Update!, ((IProgress<string>)progress).Report));
                         ok = packOk;
                         row.Result = msg;
                         reboot |= rb;
@@ -235,7 +280,7 @@ public partial class MainWindow : Window
                 "это большая коллекция драйверов, собранная сообществом (не с сайтов производителей).\n\n" +
                 "Сейчас скачаются только индексы паков (~25 МБ) через торрент — это может занять несколько минут. " +
                 "Сами драйверпаки будут скачиваться только для тех драйверов, которые вы выберете к установке.",
-                Sdi.SdiService.HasIndexes ? "Обновить индексы" : "Скачать индексы"))
+                Sdi.SdiService.IndexDir is not null ? "Обновить индексы" : "Скачать индексы"))
             return;
 
         SetBusy(true);

@@ -45,6 +45,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\publish\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
+; Встроенные сетевые драйверпаки SDIO (их скачивает build.ps1): ставятся без интернета. Архивы уже сжаты 7z.
+Source: "lan\*"; DestDir: "{app}\Drivers"; Flags: ignoreversion recursesubdirs nocompression
+[InstallDelete]
+; Старые выпуски паков: у новых другие имена файлов.
+Type: filesandordirs; Name: "{app}\Drivers"
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"

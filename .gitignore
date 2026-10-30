@@ -5,3 +5,4 @@ publish/
 *.user
 .vs/
 *.pfx
+**/installer/lan/

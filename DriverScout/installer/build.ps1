@@ -16,6 +16,16 @@ dotnet publish "$root\DriverScout.csproj" -c Release -r win-x64 --self-contained
     -o "$root\publish" -nologo -v q
 if ($LASTEXITCODE) { throw 'dotnet publish завершился с ошибкой' }
 
+Write-Host '== Сетевые драйверпаки'
+# Встраиваются в установщик, чтобы драйвер сетевой карты ставился без интернета. Качаются торрентом SDIO
+# один раз; заново — если удалить installer\lan.
+$lan = Join-Path $PSScriptRoot 'lan'
+if (-not (Test-Path "$lan\drivers\*.7z")) {
+    $p = Start-Process "$root\publish\DriverScout.exe" -ArgumentList '--fetch-lan', "`"$lan`"" -Wait -PassThru
+    if ($p.ExitCode) { throw "Не скачались сетевые драйверпаки: $(Get-Content "$lan\fetch.log" -Raw)" }
+}
+Get-ChildItem $lan -Recurse -File | ForEach-Object { Write-Host "  $($_.Name)  $([math]::Round($_.Length / 1MB)) МБ" }
+
 $isccArgs = @('/Q')
 if ($haveCert) {
     Write-Host '== Подпись программы'
