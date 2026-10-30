@@ -77,7 +77,7 @@ public static class GameApps
                 Source = AppSource.Winget, WingetId = "Valve.Steam", PageUrl = "https://store.steampowered.com/about/", DetectPattern = @"^Steam$" },
         new() { Name = "Epic Games", Icon = "epic", Description = "Лаунчер Epic Games Store и Unreal", Category = "Лаунчеры", Monogram = "Ep", Color = "#FF2A2A2A",
                 Source = AppSource.Winget, WingetId = "EpicGames.EpicGamesLauncher", PageUrl = "https://store.epicgames.com/download", DetectPattern = @"^Epic Games Launcher" },
-        new() { Name = "EA app", Description = "Игры Electronic Arts", Category = "Лаунчеры", Monogram = "EA", Color = "#FFFF4747",
+        new() { Name = "EA app", Icon = "ea", Description = "Игры Electronic Arts", Category = "Лаунчеры", Monogram = "EA", Color = "#FFFF4747",
                 Source = AppSource.Winget, WingetId = "ElectronicArts.EADesktop", PageUrl = "https://www.ea.com/ea-app", DetectPattern = @"^EA app" },
         new() { Name = "Ubisoft Connect", Icon = "ubisoft", Description = "Игры Ubisoft", Category = "Лаунчеры", Monogram = "Ub", Color = "#FF0070FF",
                 Source = AppSource.Winget, WingetId = "Ubisoft.Connect", PageUrl = "https://ubisoftconnect.com/", DetectPattern = @"^Ubisoft Connect" },
@@ -103,7 +103,7 @@ public static class GameApps
                 Source = AppSource.Winget, WingetId = "Asus.ArmouryCrate", PageUrl = "https://rog.asus.com/armoury-crate/", DetectPattern = @"Armoury ?Crate" },
         new() { Name = "GIGABYTE Control Center", Icon = "gigabyte", Description = "Подсветка, вентиляторы и обновления GIGABYTE", Category = "Утилиты производителей", Monogram = "GB", Color = "#FFF15A24",
                 Source = AppSource.Page, PageUrl = "https://www.gigabyte.com/Support/Utility", DetectPattern = @"^GIGABYTE Control Center" },
-        new() { Name = "MSI Afterburner", Description = "Разгон и мониторинг видеокарты", Category = "Утилиты производителей", Monogram = "AB", Color = "#FFB3001B",
+        new() { Name = "MSI Afterburner", Icon = "afterburner", Description = "Разгон и мониторинг видеокарты", Category = "Утилиты производителей", Monogram = "AB", Color = "#FFB3001B",
                 Source = AppSource.Winget, WingetId = "Guru3D.Afterburner", PageUrl = "https://www.msi.com/Landing/afterburner", DetectPattern = @"^MSI Afterburner" },
 
         // Периферия
@@ -111,7 +111,7 @@ public static class GameApps
                 Source = AppSource.Winget, WingetId = "Logitech.GHUB", PageUrl = "https://www.logitechg.com/innovation/g-hub.html", DetectPattern = @"^Logitech G HUB" },
         new() { Name = "Razer Synapse 4", Icon = "razer", Description = "Устройства Razer и подсветка Chroma", Category = "Периферия", Monogram = "Rz", Color = "#FF44D62C",
                 Source = AppSource.Winget, WingetId = "RazerInc.RazerInstaller.Synapse4", PageUrl = "https://www.razer.com/synapse-4", DetectPattern = @"^Razer Synapse" },
-        new() { Name = "SteelSeries GG", Description = "Устройства SteelSeries и Moments", Category = "Периферия", Monogram = "SS", Color = "#FFFF5200",
+        new() { Name = "SteelSeries GG", Icon = "steelseries", Description = "Устройства SteelSeries и Moments", Category = "Периферия", Monogram = "SS", Color = "#FFFF5200",
                 Source = AppSource.Winget, WingetId = "SteelSeries.GG", PageUrl = "https://steelseries.com/gg", DetectPattern = @"^SteelSeries GG" },
         new() { Name = "Corsair iCUE", Icon = "corsair", Description = "Устройства и подсветка Corsair", Category = "Периферия", Monogram = "iC", Color = "#FFECE81A",
                 Source = AppSource.Winget, WingetId = "Corsair.iCUE.5", PageUrl = "https://www.corsair.com/icue", DetectPattern = @"iCUE" },
