@@ -125,7 +125,7 @@ public sealed class ScanService
                 Update = upd,
                 VendorPage = vr?.PageUrl,
                 Result = upd?.Note
-                         ?? (status == RowStatus.Missing ? "Драйвер не найден ни в Windows Update, ни у производителей" : "")
+                         ?? (status == RowStatus.Missing ? "Драйвер не найден ни в Windows Update, ни у производителей, ни в каталоге Microsoft" : "")
             };
             row.IsSelected = upd is not null && !row.IsOlderThanInstalled && (upd.Note is null || upd.AutoSelect);
             rows.Add(row);
