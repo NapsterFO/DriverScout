@@ -68,6 +68,18 @@ public sealed class DellSource : IVendorSource
 
     public static async Task<Catalog> LoadCatalogAsync(string systemId, bool win11)
     {
+        var all = Parse(await LoadModelCatalogAsync(systemId));
+
+        // Драйверы под свою Windows; если их нет совсем — под другую, с пометкой.
+        var own = all.Where(p => win11 ? p.Win11 : p.Win10).ToList();
+        if (own.Count > 0) return new Catalog(systemId, null, own);
+        var other = all.Where(p => win11 ? p.Win10 : p.Win11).ToList();
+        return new Catalog(systemId, $"Dell выпускает драйверы для этой модели только под Windows {(win11 ? 10 : 11)}", other);
+    }
+
+    /// <summary>Каталог модели целиком: драйверы, BIOS, прошивки.</summary>
+    public static async Task<XDocument> LoadModelCatalogAsync(string systemId)
+    {
         var work = CabCatalog.NewWorkDir("dell");
         try
         {
@@ -83,13 +95,7 @@ public sealed class DellSource : IVendorSource
             // 2. Каталог модели.
             var modelXml = await CabCatalog.DownloadAndExtractAsync(
                 Base + (string)manifest.Attribute("path")!, Signer, Path.Combine(work, "model"), Sha256Of(manifest));
-            var all = Parse(XDocument.Load(modelXml));
-
-            // Драйверы под свою Windows; если их нет совсем — под другую, с пометкой.
-            var own = all.Where(p => win11 ? p.Win11 : p.Win10).ToList();
-            if (own.Count > 0) return new Catalog(systemId, null, own);
-            var other = all.Where(p => win11 ? p.Win10 : p.Win11).ToList();
-            return new Catalog(systemId, $"Dell выпускает драйверы для этой модели только под Windows {(win11 ? 10 : 11)}", other);
+            return XDocument.Load(modelXml);
         }
         finally
         {

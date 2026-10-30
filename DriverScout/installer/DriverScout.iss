@@ -57,6 +57,8 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; Обновление из самой программы идёт в режиме /SILENT — после него DriverScout запускается снова.
+Filename: "{app}\{#AppExe}"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [UninstallDelete]
 ; Скачанные драйверы лежат в %LOCALAPPDATA%\DriverScout\Downloads у каждого пользователя и не удаляются;

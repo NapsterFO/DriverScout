@@ -1,0 +1,161 @@
+<UserControl x:Class="DriverScout.BiosPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:DriverScout">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Строка версии BIOS у производителя -->
+        <DataTemplate x:Key="ReleaseRow" DataType="{x:Type local:BiosRelease}">
+            <Border x:Name="Row" Background="{StaticResource SurfaceBrush}" CornerRadius="14" Padding="18,12" Margin="0,0,8,8"
+                    BorderBrush="Transparent" BorderThickness="1.5">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="170"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="Version" Text="{Binding Version}" Style="{StaticResource Headline}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding DateText}" Style="{StaticResource Subhead}" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border x:Name="NewChip" Style="{StaticResource ChipFilled}" Visibility="Collapsed">
+                            <TextBlock Text="новее установленной" Style="{StaticResource ChipText}" Foreground="White"/>
+                        </Border>
+                        <Border x:Name="InstalledChip" Background="{StaticResource SuccessSoftBrush}" CornerRadius="8" Padding="9,3" Margin="0,0,6,0"
+                                Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="установлена" Style="{StaticResource ChipText}" Foreground="{StaticResource SuccessBrush}"/>
+                        </Border>
+                        <TextBlock Text="{Binding Title}" Style="{StaticResource Caption}" FontSize="13" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                    </StackPanel>
+                    <Button x:Name="Download" Grid.Column="3" Style="{StaticResource SmallSecondaryButton}" Content="Скачать"
+                            Click="Download_Click" ToolTip="{Binding DownloadUrl}"/>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsNewer}" Value="True">
+                    <Setter TargetName="NewChip" Property="Visibility" Value="Visible"/>
+                    <Setter TargetName="Version" Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding DownloadUrl}" Value="{x:Null}">
+                    <Setter TargetName="Download" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <StackPanel>
+                <TextBlock Text="BIOS" Style="{StaticResource Title1}"/>
+                <TextBlock Text="Установленная версия и что вышло у производителя" Style="{StaticResource Subhead}" Margin="0,4,0,0"/>
+            </StackPanel>
+            <Button x:Name="CheckButton" Style="{StaticResource OutlineButton}" Content="Проверить снова"
+                    HorizontalAlignment="Right" VerticalAlignment="Center" Click="Check_Click"/>
+        </Grid>
+
+        <ProgressBar x:Name="Progress" Grid.Row="1" Style="{StaticResource AccentProgress}" Margin="0,16,0,0" Visibility="Hidden"/>
+
+        <!-- Установлено / Последняя у производителя -->
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource Panel}">
+                <StackPanel>
+                    <TextBlock Text="УСТАНОВЛЕНО" Style="{StaticResource SectionLabel}"/>
+                    <TextBlock x:Name="InstalledVersion" Text="—" Style="{StaticResource Title1}" Margin="0,6,0,0"/>
+                    <TextBlock x:Name="InstalledDate" Style="{StaticResource Subhead}" Margin="0,2,0,0"/>
+                    <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,14,0,12"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Компьютер" Style="{StaticResource Caption}" FontSize="13" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="DeviceText" Grid.Column="1" Style="{StaticResource Caption}" FontSize="13" Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock Grid.Row="1" Text="Плата" Style="{StaticResource Caption}" FontSize="13" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="BoardText" Grid.Row="1" Grid.Column="1" Style="{StaticResource Caption}" FontSize="13" Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock Grid.Row="2" Text="Разработчик" Style="{StaticResource Caption}" FontSize="13"/>
+                        <TextBlock x:Name="VendorText" Grid.Row="2" Grid.Column="1" Style="{StaticResource Caption}" FontSize="13" Foreground="{StaticResource TextBrush}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border x:Name="VerdictCard" Grid.Column="2" Style="{StaticResource Panel}" BorderThickness="1.5" BorderBrush="Transparent">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="LatestLabel" Text="ПОСЛЕДНЯЯ У ПРОИЗВОДИТЕЛЯ" Style="{StaticResource SectionLabel}"/>
+                    <TextBlock x:Name="LatestVersion" Grid.Row="1" Text="—" Style="{StaticResource Title1}" Margin="0,6,0,0"/>
+                    <TextBlock x:Name="LatestDate" Grid.Row="2" Style="{StaticResource Subhead}" Margin="0,2,0,0"/>
+                    <TextBlock x:Name="Verdict" Grid.Row="3" Style="{StaticResource Body}" FontSize="15" TextWrapping="Wrap" Margin="0,14,0,0"
+                               Text="Проверяю…"/>
+                    <Button x:Name="PageButton" Grid.Row="4" Style="{StaticResource SecondaryButton}" Content="Открыть BIOS на сайте производителя"
+                            HorizontalAlignment="Left" Margin="0,14,0,0" Click="Page_Click" Visibility="Collapsed"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="3" Margin="0,20,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border Background="{StaticResource AccentSoftBrush}" CornerRadius="14" Padding="16,12">
+                <TextBlock Style="{StaticResource Caption}" FontSize="13" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap">
+                    <Run FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}">Осторожно.</Run>
+                    <Run>Обновление BIOS — единственное обновление, которое может «окирпичить» компьютер. Ставьте только версию для своей модели,
+                         от сети, не выключайте компьютер до конца. DriverScout сам BIOS не прошивает: файл ставится утилитой производителя
+                         (для ASUS — EZ Flash из меню BIOS).</Run>
+                </TextBlock>
+            </Border>
+            <TextBlock x:Name="ListTitle" Grid.Row="1" Text="Версии BIOS у производителя" Style="{StaticResource Title2}" FontSize="19" Margin="0,18,0,10"/>
+            <ListBox x:Name="Releases" Grid.Row="2" Background="Transparent" BorderThickness="0"
+                     ItemTemplate="{StaticResource ReleaseRow}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Focusable" Value="False"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <ContentPresenter/>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.Template>
+                    <ControlTemplate TargetType="ListBox">
+                        <ScrollViewer Focusable="False">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ListBox.Template>
+            </ListBox>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -17,28 +17,8 @@ public static class VendorInstaller
 
     public static async Task<(bool ok, string message)> DownloadAndRunAsync(DriverUpdate update, Action<string> progress)
     {
-        if (update.DownloadUrl is null || update.ExpectedSigner is null)
-            return (false, "Нет ссылки на установщик");
-
-        Directory.CreateDirectory(DownloadDir);
-        var name = update.FileName ?? Path.GetFileName(new Uri(update.DownloadUrl).LocalPath);
-        name = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim(' ', '-', '.');
-        var file = Path.Combine(DownloadDir, name);
-
-        // Уже скачанный и прошедший проверку файл повторно не качаем.
-        if (!File.Exists(file) || Verify(file, update) is not null)
-        {
-            var error = await DownloadAsync(update, file, progress);
-            if (error is not null) return (false, error);
-        }
-
-        progress("Проверяю контрольную сумму и цифровую подпись…");
-        var verifyError = Verify(file, update);
-        if (verifyError is not null)
-        {
-            File.Delete(file);
-            return (false, verifyError);
-        }
+        var (file, downloadError) = await DownloadVerifiedAsync(update, progress);
+        if (file is null) return (false, downloadError!);
 
         var setup = file;
         if (IsZip(file))
@@ -60,6 +40,34 @@ public static class VendorInstaller
         return proc.ExitCode == 0
             ? (true, "Установщик завершился успешно")
             : (false, $"Установщик завершился с кодом {proc.ExitCode}");
+    }
+
+    /// <summary>Скачивает файл (или берёт уже скачанный) и проверяет контрольную сумму и подпись. file = null — ошибка.</summary>
+    public static async Task<(string? file, string? error)> DownloadVerifiedAsync(DriverUpdate update, Action<string> progress)
+    {
+        if (update.DownloadUrl is null || (update.ExpectedSigner is null && update.Sha256 is not { Length: > 0 }))
+            return (null, "Нет ссылки на установщик");
+
+        Directory.CreateDirectory(DownloadDir);
+        var name = update.FileName ?? Path.GetFileName(new Uri(update.DownloadUrl).LocalPath);
+        name = string.Concat(name.Split(Path.GetInvalidFileNameChars())).Trim(' ', '-', '.');
+        var file = Path.Combine(DownloadDir, name);
+
+        // Уже скачанный и прошедший проверку файл повторно не качаем.
+        if (!File.Exists(file) || Verify(file, update) is not null)
+        {
+            var error = await DownloadAsync(update, file, progress);
+            if (error is not null) return (null, error);
+        }
+
+        progress("Проверяю контрольную сумму и цифровую подпись…");
+        var verifyError = Verify(file, update);
+        if (verifyError is not null)
+        {
+            File.Delete(file);
+            return (null, verifyError);
+        }
+        return (file, null);
     }
 
     private static async Task<string?> DownloadAsync(DriverUpdate update, string file, Action<string> progress)
@@ -113,7 +121,9 @@ public static class VendorInstaller
             return update.Sha256 is { Length: > 0 }
                    || (update.TrustArchiveFromVendor && update.DownloadUrl!.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 ? null : "Архив без контрольной суммы — установка отменена";
-        return CheckSignature(file, update.ExpectedSigner!);
+        // Установщики с GitHub (DriverScout, Hidden Path) не подписаны: их проверяет SHA-256, который публикует GitHub.
+        if (update.ExpectedSigner is null) return null;
+        return CheckSignature(file, update.ExpectedSigner);
     }
 
     private static bool IsZip(string file) => file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);

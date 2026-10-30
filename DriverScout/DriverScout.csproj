@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>1.4.1</Version>
+    <Version>1.5.0</Version>
     <Company>Napster</Company>
     <Authors>Napster</Authors>
     <Product>DriverScout</Product>
@@ -23,6 +23,8 @@
   <ItemGroup>
     <!-- Иконка окна и панели задач -->
     <Resource Include="Assets\app.ico" />
+    <!-- Логотип в боковой панели и «О программе» -->
+    <Resource Include="Assets\icon_512.png" />
     <!-- Генератор иконки — отдельная утилита, в приложение не входит -->
     <Compile Remove="tools\**" />
   </ItemGroup>

@@ -73,10 +73,18 @@ public static class OemBrands
             if (!fields.Any(f => Regex.IsMatch(f, b.Pattern, RegexOptions.IgnoreCase))) continue;
             // ASUS пишет модель дважды: "Vivobook Go E1504FA_E1504FA" → "Vivobook Go E1504FA".
             var cleanModel = Regex.Replace(sys.Model, @"\b(\w+)_\1$", "$1");
-            var model = string.IsNullOrEmpty(sys.Family) || cleanModel.Contains(sys.Family, StringComparison.OrdinalIgnoreCase)
-                ? cleanModel : $"{sys.Family} ({cleanModel})";
+            var family = Placeholder(sys.Family) ? "" : sys.Family;
+            var model = string.IsNullOrEmpty(family) || cleanModel.Contains(family, StringComparison.OrdinalIgnoreCase)
+                ? cleanModel : $"{family} ({cleanModel})";
+            // Самосборный ПК: в модели «To be filled by O.E.M.» или код платы — показываем материнскую плату.
+            if (Placeholder(sys.Model) || Placeholder(family) || (!sys.IsLaptop && sys.BoardProduct.Length > 0 && !Placeholder(sys.BoardProduct)))
+                model = Placeholder(sys.BoardProduct) ? model : sys.BoardProduct;
             return new OemInfo(b.Name, model, b.ModelUrl?.Invoke(sys) ?? b.SupportUrl, b.Utility, b.AutoCheck, b.Remark);
         }
         return null;
     }
+
+    /// <summary>Пустышки, которые сборщики оставляют в SMBIOS вместо модели.</summary>
+    public static bool Placeholder(string s) =>
+        s.Length == 0 || Regex.IsMatch(s, @"^(To be filled|Default string|System (manufacturer|Product Name|Version)|O\.E\.M\.|Not Applicable|None)", RegexOptions.IgnoreCase);
 }

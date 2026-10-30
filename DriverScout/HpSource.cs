@@ -68,6 +68,13 @@ public sealed class HpSource : IVendorSource
 
     public static async Task<Catalog> LoadCatalogAsync(string systemId, bool win11, string osRelease)
     {
+        var (doc, note) = await LoadReferenceAsync(systemId, win11, osRelease);
+        return Parse(doc, systemId, note);
+    }
+
+    /// <summary>Справочник модели целиком (драйверы, BIOS, прошивки) под подходящий выпуск Windows.</summary>
+    public static async Task<(XDocument doc, string? note)> LoadReferenceAsync(string systemId, bool win11, string osRelease)
+    {
         var work = CabCatalog.NewWorkDir("hp");
         try
         {
@@ -101,7 +108,7 @@ public sealed class HpSource : IVendorSource
             // 3. Справочник модели. В адресе выпуск пишется строчными: 8846_64_11.0.24h2.cab
             var refUrl = $"{Root}{systemId}/{systemId}_64_{(os.win11 ? "11.0" : "10.0")}.{os.release.ToLowerInvariant()}.cab";
             var refXml = await CabCatalog.DownloadAndExtractAsync(refUrl, Signer, Path.Combine(work, "ref"));
-            return Parse(XDocument.Load(refXml), systemId, note);
+            return (XDocument.Load(refXml), note);
         }
         finally
         {

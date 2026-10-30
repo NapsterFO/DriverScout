@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     private ICollectionView? _view;
     private bool _busy;
     private bool _lanOffered;
+    private GitHubReleases.Release? _update;
 
     public MainWindow()
     {
@@ -24,8 +25,86 @@ public partial class MainWindow : Window
             AdminButton.Visibility = Visibility.Collapsed;
             Title += " — администратор";
         }
+        VersionLabel.Text = $"by Napster · v{AppUpdate.Current.ToString(3)}";
+        AboutVersion.Text = $"Версия {AppUpdate.Current.ToString(3)} · by Napster";
         // Сканируем сразу при запуске: пустой экран с кнопкой ничего не даёт.
-        Loaded += (_, _) => Scan_Click(this, new RoutedEventArgs());
+        Loaded += async (_, _) =>
+        {
+            Scan_Click(this, new RoutedEventArgs());
+            await ShowPcAsync();
+            await CheckUpdateAsync(quiet: true);
+        };
+    }
+
+    // --- Меню и боковая панель ---
+
+    private async void Nav_Checked(object sender, RoutedEventArgs e)
+    {
+        if (DriversPage is null) return; // событие приходит ещё из InitializeComponent
+        DriversPage.Visibility = NavDrivers.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        GamerPage.Visibility = NavGamer.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        BiosPage.Visibility = NavBios.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        AboutPage.Visibility = NavAbout.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        if (NavGamer.IsChecked == true) await GamerPage.ActivateAsync();
+        if (NavBios.IsChecked == true) await BiosPage.ActivateAsync();
+    }
+
+    private async Task ShowPcAsync()
+    {
+        var pc = await Pc.ProfileAsync();
+        if (pc is null) { PcName.Text = "Нет сведений"; return; }
+        var name = $"{pc.Manufacturer} {(pc.Family.Length > 0 && !pc.Model.Contains(pc.Family) ? pc.Family + " " : "")}{pc.Model}".Trim();
+        // У самосборных ПК в модели «To be filled by O.E.M.» — тогда показываем материнскую плату.
+        if (name.Length == 0 || name.Contains("O.E.M", StringComparison.OrdinalIgnoreCase) || name.Contains("System Product", StringComparison.OrdinalIgnoreCase))
+            name = $"{pc.BoardManufacturer} {pc.BoardProduct}".Trim();
+        PcName.Text = name.Length > 0 ? name : "Компьютер";
+        PcCpu.Text = pc.CpuName;
+        PcOs.Text = $"Windows {(pc.IsWindows11 ? "11" : "10")} {pc.OsRelease} · сборка {pc.OsBuild}".Replace("  ", " ");
+    }
+
+    // --- Обновление DriverScout ---
+
+    private async Task CheckUpdateAsync(bool quiet)
+    {
+        CheckUpdateButton.IsEnabled = false;
+        AboutUpdate.Text = "Проверяю GitHub…";
+        _update = await AppUpdate.CheckAsync();
+        CheckUpdateButton.IsEnabled = true;
+        if (_update is null)
+        {
+            UpdateCard.Visibility = Visibility.Collapsed;
+            AboutUpdate.Text = "Установлена последняя версия.";
+            if (!quiet) ThemedDialog.Info(this, "Обновлений нет", $"DriverScout {AppUpdate.Current.ToString(3)} — последняя версия.");
+            return;
+        }
+        UpdateText.Text = $"DriverScout {_update.Version.ToString(3)} — сейчас стоит {AppUpdate.Current.ToString(3)}";
+        AboutUpdate.Text = $"Вышла версия {_update.Version.ToString(3)}. Нажмите «Обновить» в меню слева.";
+        UpdateCard.Visibility = Visibility.Visible;
+    }
+
+    private async void CheckUpdate_Click(object sender, RoutedEventArgs e) => await CheckUpdateAsync(quiet: false);
+
+    private async void Update_Click(object sender, RoutedEventArgs e)
+    {
+        if (_update is null) return;
+        var notes = _update.Notes is { Length: > 0 } n ? "\n\n" + (n.Length > 700 ? n[..700] + "…" : n) : "";
+        if (!ThemedDialog.Ask(this, $"DriverScout {_update.Version.ToString(3)}",
+                $"Скачать и установить новую версию ({_update.AssetSize / 1048576} МБ)? DriverScout закроется и запустится снова." + notes,
+                "Обновить"))
+            return;
+
+        UpdateButton.IsEnabled = false;
+        var progress = new Progress<string>(m => UpdateText.Text = m);
+        var (ok, message) = await Task.Run(() => AppUpdate.InstallAsync(_update, ((IProgress<string>)progress).Report));
+        UpdateText.Text = message;
+        if (ok) Application.Current.Shutdown();
+        else UpdateButton.IsEnabled = true;
+    }
+
+    private void OpenTag_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is string url)
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
     }
 
     private async void Scan_Click(object sender, RoutedEventArgs e)
@@ -112,6 +191,7 @@ public partial class MainWindow : Window
         FilterUpdate.Tag = _rows.Count(r => r.Status == RowStatus.Update).ToString();
         FilterProblem.Tag = _rows.Count(r => r.Status == RowStatus.Problem).ToString();
         FilterAll.Tag = _rows.Count.ToString();
+        NavDrivers.Uid = FilterAttention.Tag as string ?? "";
     }
 
     private void ShowOem(OemInfo? oem)
@@ -319,17 +399,6 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog(this) == true)
             File.WriteAllText(dlg.FileName, ScanService.BuildReport(_rows, _scan?.SourceError, _scan?.Oem));
     }
-
-    /// <summary>Уведомление о лицензии, которое GPLv3 требует показывать в интерактивных программах.</summary>
-    private void About_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) =>
-        ThemedDialog.Info(this, "О программе",
-            $"DriverScout {typeof(MainWindow).Assembly.GetName().Version?.ToString(3)} by Napster\n" +
-            "Copyright © 2026 NapsterFO\n\n" +
-            "Модуль драйверпаков основан на коде Snappy Driver Installer Origin " +
-            "(© Glenn Delahoy, © BadPointer и другие авторы SDI/SDIO).\n\n" +
-            "Это свободная программа: её можно распространять и изменять на условиях GNU General Public License " +
-            "версии 3. Программа поставляется БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ.\n\n" +
-            "Исходный код: https://github.com/NapsterFO/DriverScout");
 
     private void Admin_Click(object sender, RoutedEventArgs e)
     {

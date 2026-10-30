@@ -1,0 +1,113 @@
+<UserControl x:Class="DriverScout.GamerPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:DriverScout">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <local:HexBrushConverter x:Key="HexBrush"/>
+
+        <!-- Карточка программы: плитка-монограмма, название, описание, метки и кнопка установки -->
+        <DataTemplate x:Key="AppCard" DataType="{x:Type local:GameApp}">
+            <Border x:Name="Card" Background="{StaticResource SurfaceBrush}" CornerRadius="18" Padding="18,16" Margin="0,0,12,12"
+                    Width="318" Height="176" BorderBrush="Transparent" BorderThickness="1.5">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="46" Height="46" CornerRadius="13" Background="{Binding Color, Converter={StaticResource HexBrush}}">
+                            <TextBlock Text="{Binding Monogram}" Foreground="White" FontWeight="Bold" FontSize="15"
+                                       FontFamily="{StaticResource AppFont}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" Style="{StaticResource Headline}" FontSize="16"/>
+                            <WrapPanel Margin="0,5,0,0">
+                                <Border x:Name="InstalledChip" Background="{StaticResource SuccessSoftBrush}" CornerRadius="8" Padding="8,2" Margin="0,0,6,0"
+                                        Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="установлено" Style="{StaticResource ChipText}" Foreground="{StaticResource SuccessBrush}"/>
+                                </Border>
+                                <Border Style="{StaticResource ChipFilled}" Padding="8,2"
+                                        Visibility="{Binding IsRecommended, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="для вашего ПК" Style="{StaticResource ChipText}" Foreground="White"/>
+                                </Border>
+                                <Border Style="{StaticResource ChipMuted}" Padding="8,1">
+                                    <TextBlock Text="{Binding SourceText}" Style="{StaticResource ChipText}" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </Border>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Grid.Row="1" Text="{Binding Description}" Style="{StaticResource Caption}" FontSize="13"
+                               TextWrapping="Wrap" Margin="0,12,0,0" MaxHeight="36"/>
+
+                    <Grid Grid.Row="2">
+                        <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,120,0" TextWrapping="Wrap" MaxHeight="32"
+                                   ToolTip="{Binding Status}"/>
+                        <Button x:Name="InstallButton" Style="{StaticResource SmallPrimaryButton}" HorizontalAlignment="Right"
+                                Content="{Binding ButtonText}" IsEnabled="{Binding CanInstall}" Click="Install_Click"/>
+                    </Grid>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsInstalled}" Value="True">
+                    <Setter TargetName="InstallButton" Property="Style" Value="{StaticResource SmallSecondaryButton}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Source}" Value="{x:Static local:AppSource.Page}">
+                    <Setter TargetName="InstallButton" Property="Style" Value="{StaticResource SmallSecondaryButton}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsRecommended}" Value="True">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                </DataTrigger>
+                <Trigger SourceName="Card" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Card" Property="Background" Value="#FF222224"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <StackPanel>
+                <TextBlock Text="Для геймеров" Style="{StaticResource Title1}"/>
+                <TextBlock x:Name="Subtitle" Text="Всё, что нужно игровому компьютеру, — ставится прямо отсюда"
+                           Style="{StaticResource Subhead}" Margin="0,4,0,0"/>
+            </StackPanel>
+            <TextBox x:Name="Search" Style="{StaticResource SearchBox}" Tag="Найти программу" Width="260"
+                     HorizontalAlignment="Right" VerticalAlignment="Center" TextChanged="Search_Changed"/>
+        </Grid>
+
+        <WrapPanel x:Name="Categories" Grid.Row="1" Margin="0,20,0,8"/>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,4,0,0">
+            <ItemsControl x:Name="AppList" ItemTemplate="{StaticResource AppCard}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Name}" Style="{StaticResource Title2}" FontSize="19" Margin="0,10,0,12"/>
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ItemsControl.GroupStyle>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
