@@ -56,15 +56,34 @@ public sealed class ScanService
                 vendor[dev] = chosen ?? new VendorResult(null, page);
         }
 
+        // Каталог Microsoft — для устройств без драйвера или с ошибкой: там есть драйверы, которые Windows Update
+        // этому компьютеру сам не предлагает. Устройств таких немного, поэтому каталог не перегружаем.
+        var extra = new Dictionary<DeviceInfo, DriverUpdate>();
+        foreach (var dev in devices.Where(d => (d.IsMissingDriver || d.HasProblem) && d.HardwareIds.Length > 0
+                                               && vendor.GetValueOrDefault(d)?.Update is null && FindUpdate(d, updates) is null))
+        {
+            progress($"Ищу в каталоге Microsoft: {dev.Name}…");
+            try
+            {
+                if (UpdateCatalog.FindAsync(dev, system.OsBuild).GetAwaiter().GetResult() is { } found) extra[dev] = found;
+            }
+            catch (Exception ex)
+            {
+                _errors.Add($"{UpdateCatalog.SourceName}: {ex.Message}");
+                break; // нет интернета или сайт недоступен — не ждём таймаута на каждом устройстве
+            }
+        }
+
         // Драйверпаки SDIO — последним: только для устройств, которым ничего не нашлось в официальных источниках.
         // Сетевые паки встроены в программу, поэтому этот шаг работает и без интернета.
-        var sdi = new Dictionary<DeviceInfo, DriverUpdate>();
+        var sdi = extra;
         if (Sdi.SdiService.HasIndexes)
         {
             try
             {
-                var rest = devices.Where(d => vendor.GetValueOrDefault(d)?.Update is null && FindUpdate(d, updates) is null).ToList();
-                sdi = Sdi.SdiService.Match(rest, system, progress);
+                var rest = devices.Where(d => vendor.GetValueOrDefault(d)?.Update is null && FindUpdate(d, updates) is null
+                                              && !extra.ContainsKey(d)).ToList();
+                foreach (var (dev, upd) in Sdi.SdiService.Match(rest, system, progress)) sdi[dev] = upd;
             }
             catch (Exception ex)
             {

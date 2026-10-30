@@ -29,7 +29,8 @@ public enum DriverKind
 {
     WindowsUpdate, // ставится через Windows Update Agent
     Installer,     // .exe-установщик с сайта производителя
-    DriverPack     // INF из драйверпака SDIO
+    DriverPack,    // INF из драйверпака SDIO
+    Catalog        // .cab из каталога Центра обновления Майкрософт
 }
 
 /// <summary>Драйвер, найденный в одном из источников.</summary>
@@ -59,6 +60,12 @@ public sealed class DriverUpdate
     public bool Bundled { get; init; }
     /// <summary>Отметить к установке, несмотря на примечание: встроенный драйвер для сетевой карты без драйвера.</summary>
     public bool AutoSelect { get; init; }
+
+    // Только для Kind == Catalog.
+    /// <summary>Подходящие записи каталога, лучшая первой: при установке пробуются по очереди.</summary>
+    public string[]? CatalogIds { get; init; }
+    /// <summary>Все ID устройства — по ним ищется нужный INF в скачанном .cab.</summary>
+    public string[]? DeviceIds { get; init; }
     /// <summary>Подпись .exe должна принадлежать этой компании, иначе не запускаем.</summary>
     public string? ExpectedSigner { get; init; }
     /// <summary>Контрольная сумма от производителя, если он её публикует (ASUS).</summary>

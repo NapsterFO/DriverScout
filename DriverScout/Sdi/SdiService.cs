@@ -189,8 +189,14 @@ public static class SdiService
 
         var inf = Path.Combine(target, update.PackInf!.Replace('/', '\\'));
         progress("Устанавливаю драйвер…");
+        return InstallInf(update.HardwareId!, inf);
+    }
+
+    /// <summary>Ставит INF устройствам с этим Hardware ID (как SDIO, с INSTALLFLAG_FORCE). Подпись проверяет Windows.</summary>
+    public static (bool ok, bool reboot, string message) InstallInf(string hardwareId, string inf)
+    {
         const uint INSTALLFLAG_FORCE = 1;
-        if (UpdateDriverForPlugAndPlayDevices(IntPtr.Zero, update.HardwareId!, inf, INSTALLFLAG_FORCE, out var reboot))
+        if (UpdateDriverForPlugAndPlayDevices(IntPtr.Zero, hardwareId, inf, INSTALLFLAG_FORCE, out var reboot))
             return (true, reboot, reboot ? "Драйвер установлен, нужна перезагрузка" : "Драйвер установлен");
         int err = Marshal.GetLastWin32Error();
         return (false, false, $"Windows не установила драйвер: {new System.ComponentModel.Win32Exception(err).Message} (0x{err:X8})");

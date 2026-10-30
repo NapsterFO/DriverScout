@@ -242,6 +242,14 @@ public partial class MainWindow : Window
                         row.Result = msg;
                         reboot |= rb;
                     }
+                    else if (row.Update.Kind == DriverKind.Catalog)
+                    {
+                        var progress = new Progress<string>(m => row.Result = m);
+                        var (catOk, rb, msg) = await Task.Run(() => UpdateCatalog.InstallAsync(row.Update, ((IProgress<string>)progress).Report));
+                        ok = catOk;
+                        row.Result = msg;
+                        reboot |= rb;
+                    }
                     else if (_scan?.WindowsUpdate is { } wu)
                     {
                         var (wuOk, rb, msg) = await Task.Run(() => wu.Install(row.Update));
