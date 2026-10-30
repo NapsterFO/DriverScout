@@ -24,7 +24,8 @@ public sealed class GameApp : INotifyPropertyChanged
     public required string Name { get; init; }
     public required string Description { get; init; }
     public required string Category { get; init; }
-    /// <summary>Буквы на плитке-иконке и её цвет.</summary>
+    /// <summary>Иконка из Assets\apps\{Icon}.png; без неё — плитка с буквами и цветом бренда.</summary>
+    public string? Icon { get; init; }
     public required string Monogram { get; init; }
     public required string Color { get; init; }
     public required AppSource Source { get; init; }
@@ -46,6 +47,7 @@ public sealed class GameApp : INotifyPropertyChanged
     public string? Status { get => _status; set { _status = value; Changed(); Changed(nameof(HasStatus)); } }
     public bool HasStatus => !string.IsNullOrEmpty(_status);
     public bool CanInstall => !_busy;
+    public bool HasIcon => Icon is not null;
 
     public string ButtonText => Source == AppSource.Page ? "Открыть сайт" : IsInstalled ? "Переустановить" : "Установить";
     public string SourceText => Source switch
@@ -65,71 +67,71 @@ public static class GameApps
 {
     public static List<GameApp> Create() =>
     [
+        // Своё — первым
+        new() { Name = "Hidden Path", Icon = "hiddenpath", Description = "Обход блокировок: zapret + свой VLESS-сервер + прокси для Telegram", Category = "От Napster", Monogram = "HP", Color = "#FFFF7A00",
+                Source = AppSource.GitHub, Repo = "NapsterFO/HiddenPath", AssetPattern = @"Setup.*\.exe$",
+                PageUrl = "https://github.com/NapsterFO/HiddenPath", DetectPattern = @"^Hidden ?Path" },
+
         // Лаунчеры
-        new() { Name = "Steam", Description = "Магазин и библиотека игр Valve", Category = "Лаунчеры", Monogram = "St", Color = "#FF1B2838",
+        new() { Name = "Steam", Icon = "steam", Description = "Магазин и библиотека игр Valve", Category = "Лаунчеры", Monogram = "St", Color = "#FF1B2838",
                 Source = AppSource.Winget, WingetId = "Valve.Steam", PageUrl = "https://store.steampowered.com/about/", DetectPattern = @"^Steam$" },
-        new() { Name = "Epic Games", Description = "Лаунчер Epic Games Store и Unreal", Category = "Лаунчеры", Monogram = "Ep", Color = "#FF2A2A2A",
+        new() { Name = "Epic Games", Icon = "epic", Description = "Лаунчер Epic Games Store и Unreal", Category = "Лаунчеры", Monogram = "Ep", Color = "#FF2A2A2A",
                 Source = AppSource.Winget, WingetId = "EpicGames.EpicGamesLauncher", PageUrl = "https://store.epicgames.com/download", DetectPattern = @"^Epic Games Launcher" },
         new() { Name = "EA app", Description = "Игры Electronic Arts", Category = "Лаунчеры", Monogram = "EA", Color = "#FFFF4747",
                 Source = AppSource.Winget, WingetId = "ElectronicArts.EADesktop", PageUrl = "https://www.ea.com/ea-app", DetectPattern = @"^EA app" },
-        new() { Name = "Ubisoft Connect", Description = "Игры Ubisoft", Category = "Лаунчеры", Monogram = "Ub", Color = "#FF0070FF",
+        new() { Name = "Ubisoft Connect", Icon = "ubisoft", Description = "Игры Ubisoft", Category = "Лаунчеры", Monogram = "Ub", Color = "#FF0070FF",
                 Source = AppSource.Winget, WingetId = "Ubisoft.Connect", PageUrl = "https://ubisoftconnect.com/", DetectPattern = @"^Ubisoft Connect" },
-        new() { Name = "Battle.net", Description = "Игры Blizzard и Activision", Category = "Лаунчеры", Monogram = "Bn", Color = "#FF148EFF",
+        new() { Name = "Battle.net", Icon = "battlenet", Description = "Игры Blizzard и Activision", Category = "Лаунчеры", Monogram = "Bn", Color = "#FF148EFF",
                 Source = AppSource.Winget, WingetId = "Blizzard.BattleNet", PageUrl = "https://download.battle.net/", DetectPattern = @"^Battle\.net" },
 
         // Общение
-        new() { Name = "Discord", Description = "Голосовые и текстовые чаты", Category = "Общение", Monogram = "Dc", Color = "#FF5865F2",
+        new() { Name = "Discord", Icon = "discord", Description = "Голосовые и текстовые чаты", Category = "Общение", Monogram = "Dc", Color = "#FF5865F2",
                 Source = AppSource.Winget, WingetId = "Discord.Discord", PageUrl = "https://discord.com/download", DetectPattern = @"^Discord$" },
-        new() { Name = "TeamSpeak 3", Description = "Голосовая связь с низкой задержкой", Category = "Общение", Monogram = "TS", Color = "#FF2580C3",
+        new() { Name = "TeamSpeak 3", Icon = "teamspeak", Description = "Голосовая связь с низкой задержкой", Category = "Общение", Monogram = "TS", Color = "#FF2580C3",
                 Source = AppSource.Winget, WingetId = "TeamSpeakSystems.TeamSpeakClient", PageUrl = "https://www.teamspeak.com/downloads/", DetectPattern = @"^TeamSpeak" },
 
         // Видеокарта
-        new() { Name = "NVIDIA App", Description = "Драйверы GeForce, настройки игр, запись", Category = "Видеокарта", Monogram = "Nv", Color = "#FF76B900",
+        new() { Name = "NVIDIA App", Icon = "nvidia", Description = "Драйверы GeForce, настройки игр, запись", Category = "Видеокарта", Monogram = "Nv", Color = "#FF76B900",
                 Source = AppSource.Nvidia, PageUrl = "https://www.nvidia.com/en-us/software/nvidia-app/", DetectPattern = @"^NVIDIA app" },
-        new() { Name = "AMD Software: Adrenalin", Description = "Драйверы Radeon и игровые настройки", Category = "Видеокарта", Monogram = "AMD", Color = "#FFED1C24",
+        new() { Name = "AMD Software: Adrenalin", Icon = "amd", Description = "Драйверы Radeon и игровые настройки", Category = "Видеокарта", Monogram = "AMD", Color = "#FFED1C24",
                 Source = AppSource.Amd, PageUrl = "https://www.amd.com/en/support/download/drivers.html", DetectPattern = @"^AMD Software" },
 
         // Утилиты производителей
-        new() { Name = "MSI Center", Description = "Подсветка, вентиляторы и режимы MSI", Category = "Утилиты производителей", Monogram = "MSI", Color = "#FFE3000F",
+        new() { Name = "MSI Center", Icon = "msi", Description = "Подсветка, вентиляторы и режимы MSI", Category = "Утилиты производителей", Monogram = "MSI", Color = "#FFE3000F",
                 Source = AppSource.Winget, WingetId = "MSI.MSICenter", PageUrl = "https://www.msi.com/Landing/MSI-Center", DetectPattern = @"^MSI Center" },
-        new() { Name = "ASUS Armoury Crate", Description = "Подсветка Aura, вентиляторы и обновления ASUS", Category = "Утилиты производителей", Monogram = "AC", Color = "#FF00539B",
+        new() { Name = "ASUS Armoury Crate", Icon = "armoury", Description = "Подсветка Aura, вентиляторы и обновления ASUS", Category = "Утилиты производителей", Monogram = "AC", Color = "#FF00539B",
                 Source = AppSource.Winget, WingetId = "Asus.ArmouryCrate", PageUrl = "https://rog.asus.com/armoury-crate/", DetectPattern = @"Armoury ?Crate" },
-        new() { Name = "GIGABYTE Control Center", Description = "Подсветка, вентиляторы и обновления GIGABYTE", Category = "Утилиты производителей", Monogram = "GB", Color = "#FFF15A24",
+        new() { Name = "GIGABYTE Control Center", Icon = "gigabyte", Description = "Подсветка, вентиляторы и обновления GIGABYTE", Category = "Утилиты производителей", Monogram = "GB", Color = "#FFF15A24",
                 Source = AppSource.Page, PageUrl = "https://www.gigabyte.com/Support/Utility", DetectPattern = @"^GIGABYTE Control Center" },
         new() { Name = "MSI Afterburner", Description = "Разгон и мониторинг видеокарты", Category = "Утилиты производителей", Monogram = "AB", Color = "#FFB3001B",
                 Source = AppSource.Winget, WingetId = "Guru3D.Afterburner", PageUrl = "https://www.msi.com/Landing/afterburner", DetectPattern = @"^MSI Afterburner" },
 
         // Периферия
-        new() { Name = "Logitech G HUB", Description = "Мыши, клавиатуры и гарнитуры Logitech G", Category = "Периферия", Monogram = "G", Color = "#FF00B8FC",
+        new() { Name = "Logitech G HUB", Icon = "ghub", Description = "Мыши, клавиатуры и гарнитуры Logitech G", Category = "Периферия", Monogram = "G", Color = "#FF00B8FC",
                 Source = AppSource.Winget, WingetId = "Logitech.GHUB", PageUrl = "https://www.logitechg.com/innovation/g-hub.html", DetectPattern = @"^Logitech G HUB" },
-        new() { Name = "Razer Synapse 4", Description = "Устройства Razer и подсветка Chroma", Category = "Периферия", Monogram = "Rz", Color = "#FF44D62C",
+        new() { Name = "Razer Synapse 4", Icon = "razer", Description = "Устройства Razer и подсветка Chroma", Category = "Периферия", Monogram = "Rz", Color = "#FF44D62C",
                 Source = AppSource.Winget, WingetId = "RazerInc.RazerInstaller.Synapse4", PageUrl = "https://www.razer.com/synapse-4", DetectPattern = @"^Razer Synapse" },
         new() { Name = "SteelSeries GG", Description = "Устройства SteelSeries и Moments", Category = "Периферия", Monogram = "SS", Color = "#FFFF5200",
                 Source = AppSource.Winget, WingetId = "SteelSeries.GG", PageUrl = "https://steelseries.com/gg", DetectPattern = @"^SteelSeries GG" },
-        new() { Name = "Corsair iCUE", Description = "Устройства и подсветка Corsair", Category = "Периферия", Monogram = "iC", Color = "#FFECE81A",
+        new() { Name = "Corsair iCUE", Icon = "corsair", Description = "Устройства и подсветка Corsair", Category = "Периферия", Monogram = "iC", Color = "#FFECE81A",
                 Source = AppSource.Winget, WingetId = "Corsair.iCUE.5", PageUrl = "https://www.corsair.com/icue", DetectPattern = @"iCUE" },
 
         // Мониторинг и запись
-        new() { Name = "HWiNFO", Description = "Подробные датчики и сведения о железе", Category = "Мониторинг и запись", Monogram = "HW", Color = "#FF3C6FB6",
+        new() { Name = "HWiNFO", Icon = "hwinfo", Description = "Подробные датчики и сведения о железе", Category = "Мониторинг и запись", Monogram = "HW", Color = "#FF3C6FB6",
                 Source = AppSource.Winget, WingetId = "REALiX.HWiNFO", PageUrl = "https://www.hwinfo.com/download/", DetectPattern = @"^HWiNFO" },
-        new() { Name = "CPU-Z", Description = "Процессор, память и материнская плата", Category = "Мониторинг и запись", Monogram = "CZ", Color = "#FF4B5FA6",
+        new() { Name = "CPU-Z", Icon = "cpuz", Description = "Процессор, память и материнская плата", Category = "Мониторинг и запись", Monogram = "CZ", Color = "#FF4B5FA6",
                 Source = AppSource.Winget, WingetId = "CPUID.CPU-Z", PageUrl = "https://www.cpuid.com/softwares/cpu-z.html", DetectPattern = @"CPU-Z" },
-        new() { Name = "GPU-Z", Description = "Сведения о видеокарте и датчики", Category = "Мониторинг и запись", Monogram = "GZ", Color = "#FF8E1C1C",
+        new() { Name = "GPU-Z", Icon = "gpuz", Description = "Сведения о видеокарте и датчики", Category = "Мониторинг и запись", Monogram = "GZ", Color = "#FF8E1C1C",
                 Source = AppSource.Winget, WingetId = "TechPowerUp.GPU-Z", PageUrl = "https://www.techpowerup.com/gpuz/", DetectPattern = @"GPU-Z" },
-        new() { Name = "OBS Studio", Description = "Запись и стримы", Category = "Мониторинг и запись", Monogram = "OBS", Color = "#FF302E31",
+        new() { Name = "OBS Studio", Icon = "obs", Description = "Запись и стримы", Category = "Мониторинг и запись", Monogram = "OBS", Color = "#FF302E31",
                 Source = AppSource.Winget, WingetId = "OBSProject.OBSStudio", PageUrl = "https://obsproject.com/download", DetectPattern = @"^OBS Studio" },
 
         // Компоненты, без которых не запускаются игры
-        new() { Name = "Visual C++ Redistributable", Description = "Библиотеки Microsoft, нужные большинству игр", Category = "Компоненты Windows", Monogram = "C++", Color = "#FF68217A",
+        new() { Name = "Visual C++ Redistributable", Icon = "vcpp", Description = "Библиотеки Microsoft, нужные большинству игр", Category = "Компоненты Windows", Monogram = "C++", Color = "#FF68217A",
                 Source = AppSource.Winget, WingetId = "Microsoft.VCRedist.2015+.x64", PageUrl = "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist",
                 DetectPattern = @"Visual C\+\+ (2015-20\d\d|v14) .*x64" },
-        new() { Name = "DirectX (среда выполнения)", Description = "Старые компоненты DirectX 9–11 для игр", Category = "Компоненты Windows", Monogram = "DX", Color = "#FF107C10",
+        new() { Name = "DirectX (среда выполнения)", Icon = "directx", Description = "Старые компоненты DirectX 9–11 для игр", Category = "Компоненты Windows", Monogram = "DX", Color = "#FF107C10",
                 Source = AppSource.Winget, WingetId = "Microsoft.DirectX", PageUrl = "https://www.microsoft.com/download/details.aspx?id=35" },
-
-        // Своё
-        new() { Name = "Hidden Path", Description = "Обход блокировок: zapret + свой VLESS-сервер + прокси для Telegram", Category = "От Napster", Monogram = "HP", Color = "#FFFF7A00",
-                Source = AppSource.GitHub, Repo = "NapsterFO/HiddenPath", AssetPattern = @"Setup.*\.exe$",
-                PageUrl = "https://github.com/NapsterFO/HiddenPath", DetectPattern = @"^Hidden ?Path" },
     ];
 
     /// <summary>Отмечает установленные и подходящие этому компьютеру программы.</summary>

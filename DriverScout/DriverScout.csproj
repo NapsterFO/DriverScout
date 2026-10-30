@@ -25,6 +25,8 @@
     <Resource Include="Assets\app.ico" />
     <!-- Логотип в боковой панели и «О программе» -->
     <Resource Include="Assets\icon_512.png" />
+    <!-- Иконки программ на вкладке «Для геймеров» -->
+    <Resource Include="Assets\apps\*.png" />
     <!-- Генератор иконки — отдельная утилита, в приложение не входит -->
     <Compile Remove="tools\**" />
   </ItemGroup>
