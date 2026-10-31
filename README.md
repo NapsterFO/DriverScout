@@ -6,10 +6,13 @@
 
 <p align="center">
   Находит устройства без драйверов и устаревшие драйверы в Windows и ставит свежие версии —<br>
-  из Windows Update, с сайтов производителей и, по желанию, из драйверпаков Snappy Driver Installer Origin.
+  из Windows Update, с сайтов производителей и, по желанию, из драйверпаков Snappy Driver Installer Origin.<br>
+  А ещё ставит игровые программы в один клик, показывает версию BIOS и сам обновляется.
 </p>
 
 <p align="center">
+  <a href="https://github.com/NapsterFO/DriverScout/releases/latest"><img alt="Последняя версия" src="https://img.shields.io/github/v/release/NapsterFO/DriverScout?label=%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F&color=FF7A00"></a>
+  <a href="https://github.com/NapsterFO/DriverScout/releases"><img alt="Скачиваний" src="https://img.shields.io/github/downloads/NapsterFO/DriverScout/total?label=%D1%81%D0%BA%D0%B0%D1%87%D0%B8%D0%B2%D0%B0%D0%BD%D0%B8%D0%B9&color=FF7A00"></a>
   <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows">
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4?logo=dotnet">
   <img alt="WPF" src="https://img.shields.io/badge/UI-WPF-FF7A00">
@@ -18,8 +21,25 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" width="820" alt="Окно DriverScout">
+  <a href="https://github.com/NapsterFO/DriverScout/releases/latest"><img alt="Скачать для Windows" src="https://img.shields.io/badge/%D0%A1%D0%BA%D0%B0%D1%87%D0%B0%D1%82%D1%8C-%D0%B4%D0%BB%D1%8F%20Windows-FF7A00?style=for-the-badge"></a>
 </p>
+
+<p align="center">
+  <img src="docs/screenshot.png" width="860" alt="Вкладка «Драйверы»">
+</p>
+
+## Скриншоты
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/gamer.png" alt="Вкладка «Для геймеров»"><br><sub><b>Для геймеров</b> — лаунчеры, мессенджеры, драйверы видеокарты и утилиты в один клик</sub></td>
+    <td width="50%"><img src="docs/gamer-utils.png" alt="Утилиты производителей"><br><sub><b>Утилиты производителей</b> — программа для вашей платы помечена «для вашего ПК»</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/bios.png" alt="Вкладка BIOS"><br><sub><b>BIOS</b> — установленная версия и что вышло у производителя</sub></td>
+    <td width="50%"><img src="docs/about.png" alt="О программе"><br><sub><b>О программе</b> — проверка обновлений DriverScout</sub></td>
+  </tr>
+</table>
 
 ## Возможности
 
@@ -36,6 +56,37 @@
   - проверка цифровой подписи производителя и SHA-256 каждого скачанного файла;
   - не предлагает «обновление», если установленная версия новее.
 - **Отчёт** о состоянии драйверов в текстовый файл.
+
+### Для геймеров
+
+24 программы для игрового компьютера ставятся прямо из DriverScout — без поиска установщиков по сайтам:
+
+| Раздел | Программы |
+|---|---|
+| От Napster | [Hidden Path](https://github.com/NapsterFO/HiddenPath) |
+| Лаунчеры | Steam, Epic Games, EA app, Ubisoft Connect, Battle.net |
+| Общение | Discord, TeamSpeak 3 |
+| Видеокарта | NVIDIA App, AMD Software: Adrenalin |
+| Утилиты производителей | MSI Center, ASUS Armoury Crate, GIGABYTE Control Center, MSI Afterburner |
+| Периферия | Logitech G HUB, Razer Synapse, SteelSeries GG, Corsair iCUE |
+| Мониторинг и запись | HWiNFO, CPU-Z, GPU-Z, OBS Studio |
+| Компоненты Windows | Visual C++ Redistributable, DirectX |
+
+- Уже установленные программы отмечаются, а подходящие именно вашему ПК (по видеокарте и материнской плате) — помечены «для вашего ПК».
+- Большинство программ ставится тихо через `winget` из официального репозитория Microsoft. NVIDIA App и AMD Adrenalin скачиваются с сайтов NVIDIA и AMD с проверкой цифровой подписи, Hidden Path — из GitHub-релиза с проверкой SHA-256.
+- Установки идут по очереди, прогресс виден на карточке программы.
+
+### BIOS
+
+- Показывает установленную версию BIOS, дату и плату.
+- Для **ASUS, Lenovo, Dell и HP** сам находит версии BIOS для вашей модели на сайте производителя и показывает, есть ли новее, с датой и ссылкой на скачивание.
+- Для MSI, Gigabyte, ASRock и других — открывает страницу BIOS вашей модели на сайте производителя.
+- DriverScout сам BIOS не прошивает: файл ставится утилитой производителя.
+
+### Обновление программы
+
+- При запуске DriverScout проверяет, не вышла ли новая версия на GitHub, и показывает карточку «Доступно обновление».
+- Обновление в один клик: установщик скачивается, сверяется по SHA-256 из релиза и ставится поверх, после чего программа перезапускается.
 
 ## Источники драйверов
 
@@ -55,8 +106,8 @@
 
 ## Установка
 
-Скачайте `DriverScout-Setup-<версия>.exe` из раздела **Releases** и запустите.
-Отдельно ставить .NET не нужно — среда выполнения уже внутри.
+Скачайте `DriverScout-Setup-<версия>.exe` из раздела [**Releases**](https://github.com/NapsterFO/DriverScout/releases/latest) и запустите.
+Отдельно ставить .NET не нужно — среда выполнения уже внутри. Дальше DriverScout обновляется сам.
 
 Требования: Windows 10 или 11 x64, интернет (кроме встроенных сетевых драйверов). Для установки драйверов нужны права администратора — программа попросит их сама.
 
@@ -65,6 +116,7 @@
 1. Запустите DriverScout — сканирование начнётся само (около минуты).
 2. Отметьте нужные обновления.
 3. Нажмите **«Установить выбранное»**. Драйверы из Windows Update ставятся автоматически, установщики производителей открываются в обычном режиме.
+4. На вкладке **«Для геймеров»** нажмите «Установить» у нужных программ, на вкладке **«BIOS»** — посмотрите, есть ли новая версия.
 
 Без окна, только отчёт:
 
@@ -117,8 +169,13 @@ DriverScout/
 ├─ VendorInstaller.cs       загрузка, проверка подписи и SHA-256, запуск установщика
 ├─ OemBrands.cs             справочник брендов ноутбуков
 ├─ ScanService.cs           сборка результатов и отчёт
+├─ UpdateCatalog.cs         поиск в каталоге Центра обновления Майкрософт
+├─ GameApps.cs              программы вкладки «Для геймеров» и их установка (winget, NVIDIA, AMD, GitHub)
+├─ BiosService.cs           версия BIOS и выпуски ASUS, Lenovo, Dell, HP
+├─ GitHubReleases.cs, AppUpdate.cs   релизы GitHub и самообновление DriverScout
 ├─ Sdi/                     драйверпаки SDIO: индексы, подбор, торрент, установка (порт кода SDIO)
-├─ MainWindow.xaml, Theme.xaml, ThemedDialog.xaml   интерфейс
+├─ MainWindow.xaml, GamerPage.xaml, BiosPage.xaml, Theme.xaml, ThemedDialog.xaml   интерфейс
+├─ Assets/apps/             иконки программ вкладки «Для геймеров»
 ├─ installer/               Inno Setup, build.ps1, sign.ps1
 └─ tools/IconGen.cs         генератор иконки
 ```
@@ -131,6 +188,8 @@ DriverScout/
 - Из каталога Microsoft берётся только первая страница результатов (25 самых свежих записей): если все они для более новой Windows, старый драйвер не найдётся.
 - Встроены только драйверы проводных сетевых карт; Wi-Fi-паки весят ~700 МБ и в установщик не входят.
 - Установщики производителей запускаются в интерактивном режиме, а не тихо.
+- BIOS автоматически проверяется только для ASUS, Lenovo, Dell и HP; для остальных — ссылка на страницу модели. Прошивать BIOS нужно утилитой производителя.
+- GIGABYTE Control Center нет в `winget` — для него открывается сайт производителя.
 - Только Windows x64.
 
 ## Лицензия
