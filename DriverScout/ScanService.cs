@@ -66,11 +66,12 @@ public sealed class ScanService
         // Каталог Microsoft. В нём лежат драйверы, которые Windows Update этому компьютеру сам не предлагает,
         // и почти всё от Intel, Realtek, MediaTek, Qualcomm (сайты которых программам не отвечают).
         // Сначала — устройства без драйвера или с ошибкой, потом — свежие версии для работающих.
+        // Устройства, которым драйвер уже нашёлся у производителя или на зеркале, тоже проверяем: пользователь
+        // сможет выбрать, откуда качать.
         UpdateCatalog.BeginScan();
         var extra = new Dictionary<DeviceInfo, DriverUpdate>();
-        var broken = devices.Where(d => (d.IsMissingDriver || d.HasProblem) && d.HardwareIds.Length > 0
-                                        && vendor.GetValueOrDefault(d)?.Update is null).ToList();
-        var working = devices.Where(d => !broken.Contains(d) && vendor.GetValueOrDefault(d)?.Update is null && WorthCatalogCheck(d))
+        var broken = devices.Where(d => (d.IsMissingDriver || d.HasProblem) && d.HardwareIds.Length > 0).ToList();
+        var working = devices.Where(d => !broken.Contains(d) && WorthCatalogCheck(d))
             .OrderByDescending(d => VendorSources.IsVendor(d, "8086") || d.HardwareIds.Any(h => h.Contains("VID_8087", StringComparison.OrdinalIgnoreCase)))
             .Take(MaxCatalogChecks).ToList();
         int n = 0, done = 0, total = broken.Count + working.Count;
@@ -101,9 +102,9 @@ public sealed class ScanService
         if (!wuTask.IsCompleted) progress("Жду ответа Windows Update…");
         var updates = wuTask.GetAwaiter().GetResult();
 
-        // Драйверпаки SDIO — последним: только для устройств, которым ничего не нашлось в официальных источниках.
-        // Сетевые паки встроены в программу, поэтому этот шаг работает и без интернета.
-        var sdi = extra;
+        // Драйверпаки SDIO — последний по приоритету вариант. Сетевые паки встроены в программу,
+        // поэтому этот шаг работает и без интернета.
+        var sdi = new Dictionary<DeviceInfo, DriverUpdate>();
         // Устройствам без драйвера не нашлось ничего в официальных источниках (или те недоступны без VPN) —
         // один раз скачиваем индексы драйверпаков SDIO: торрент не зависит от сайтов производителей.
         bool unresolved = devices.Any(d => (d.IsMissingDriver || d.HasProblem) && d.HardwareIds.Length > 0
@@ -126,11 +127,9 @@ public sealed class ScanService
         {
             try
             {
-                var rest = devices.Where(d => vendor.GetValueOrDefault(d)?.Update is null && FindUpdate(d, updates) is null
-                                              && !extra.ContainsKey(d)).ToList();
                 // Работающему устройству сторонняя сборка нужна, только если она новее его драйвера производителя:
                 // стандартные драйверы Windows (шины, Bluetooth-профили, AHCI) на сборки SDIO не меняем.
-                foreach (var (dev, upd) in Sdi.SdiService.Match(rest, system, progress))
+                foreach (var (dev, upd) in Sdi.SdiService.Match(devices, system, progress))
                     if (dev.IsMissingDriver || dev.HasProblem
                         || (!VendorSources.IsInboxDriver(dev) && upd.Date > dev.DriverDate
                             && VendorSources.ParseVersion(upd.Version) > VendorSources.ParseVersion(dev.DriverVersion)))
@@ -142,11 +141,12 @@ public sealed class ScanService
             }
         }
 
-        return Match(devices, updates, vendor, sdi);
+        return Match(devices, updates, vendor, extra, sdi);
     }
 
     public static List<DriverRow> Match(List<DeviceInfo> devices, List<DriverUpdate> updates,
                                         Dictionary<DeviceInfo, VendorResult> vendor,
+                                        Dictionary<DeviceInfo, DriverUpdate>? catalog = null,
                                         Dictionary<DeviceInfo, DriverUpdate>? sdi = null)
     {
         var rows = new List<DriverRow>();
@@ -157,13 +157,13 @@ public sealed class ScanService
             var wu = FindUpdate(dev, updates);
             if (wu is not null) used.Add(wu);
             var vr = vendor.GetValueOrDefault(dev);
-            // Драйвер с сайта производителя проверен как более новый — он важнее Windows Update.
-            // Из каталога Microsoft берём, если там версия новее той, что предлагает Windows Update.
-            var other = sdi?.GetValueOrDefault(dev);
-            var upd = vr?.Update
-                      ?? (wu is not null && other?.Kind == DriverKind.Catalog
-                          && VendorSources.ParseVersion(other.Version) > VendorSources.ParseVersion(wu.Version) ? other : wu)
-                      ?? other;
+            // Все найденные варианты, лучший первым: сайт производителя или зеркало его установщиков (проверено как
+            // более новое), затем официальные Microsoft — Windows Update и каталог, новее первым, и последним — сборка SDIO.
+            var official = new[] { wu, catalog?.GetValueOrDefault(dev) }.OfType<DriverUpdate>()
+                .OrderByDescending(u => VendorSources.ParseVersion(u.Version));
+            var choices = new[] { vr?.Update }.Concat(official).Append(sdi?.GetValueOrDefault(dev))
+                .OfType<DriverUpdate>().Distinct().ToList();
+            var upd = choices.FirstOrDefault();
 
             var status = dev.IsMissingDriver ? RowStatus.Missing
                        : upd is not null ? RowStatus.Update
@@ -178,12 +178,12 @@ public sealed class ScanService
                 HardwareId = dev.HardwareIds.FirstOrDefault() ?? dev.DeviceId,
                 CurrentVersion = dev.DriverVersion,
                 CurrentDate = dev.DriverDate,
-                Update = upd,
                 Device = dev,
                 VendorPage = vr?.PageUrl,
                 Result = upd?.Note
                          ?? (status == RowStatus.Missing ? "Драйвер не найден ни в Windows Update, ни у производителей, ни в каталоге Microsoft" : "")
             };
+            row.SetChoices(choices);
             row.IsSelected = upd is not null && !row.IsOlderThanInstalled && (upd.Note is null || upd.AutoSelect);
             rows.Add(row);
         }

@@ -107,16 +107,62 @@ public partial class MainWindow : Window
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
     }
 
+    /// <summary>Сколько длились прошлые сканирования: по ним оцениваем, сколько ждать сейчас.</summary>
+    private static readonly string ScanTimeFile = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DriverScout", "scan-seconds.txt");
+
+    private static int EstimateScanSeconds()
+    {
+        try
+        {
+            if (File.Exists(ScanTimeFile) && int.TryParse(File.ReadAllText(ScanTimeFile), out var last) && last > 0)
+                // Повторный скан быстрее (кэш каталога), но запас не помешает.
+                return Math.Clamp(last + 15, 20, 600);
+        }
+        catch (IOException) { }
+        return 120; // первый поиск: каталог Microsoft проверяется по каждому устройству
+    }
+
+    private static string Clock(TimeSpan t) => $"{(int)t.TotalMinutes}:{t.Seconds:00}";
+
     private async void Scan_Click(object sender, RoutedEventArgs e)
     {
         SetBusy(true);
-        ShowEmpty("Сканирую…", "Ищу устройства и драйверы — это займёт около минуты");
+        var estimate = TimeSpan.FromSeconds(EstimateScanSeconds());
+        ShowEmpty("Ищу драйверы…", $"Это займёт примерно {Math.Max(1, (int)Math.Round(estimate.TotalMinutes))} мин.");
         DeviceList.ItemsSource = null;
+        var watch = Stopwatch.StartNew();
+        ScanTimerPanel.Visibility = Visibility.Visible;
+        void Tick()
+        {
+            var left = estimate - watch.Elapsed;
+            ScanTimerText.Text = left > TimeSpan.Zero
+                ? $"Прошло {Clock(watch.Elapsed)}  ·  осталось примерно {Clock(left)}"
+                : $"Прошло {Clock(watch.Elapsed)}  ·  ещё немного…";
+        }
+        Tick();
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        timer.Tick += (_, _) => Tick();
+        timer.Start();
         try
         {
             _scan = new ScanService();
             var scan = _scan;
-            _rows = await Task.Run(() => scan.Run(msg => Dispatcher.Invoke(() => StatusText.Text = msg)));
+            try
+            {
+                _rows = await Task.Run(() => scan.Run(msg => Dispatcher.Invoke(() => StatusText.Text = msg)));
+            }
+            finally
+            {
+                timer.Stop();
+                ScanTimerPanel.Visibility = Visibility.Collapsed;
+            }
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(ScanTimeFile)!);
+                File.WriteAllText(ScanTimeFile, ((int)watch.Elapsed.TotalSeconds).ToString());
+            }
+            catch (IOException) { }
             foreach (var row in _rows)
                 row.PropertyChanged += (_, a) => { if (a.PropertyName == nameof(DriverRow.IsSelected)) UpdateInstallButton(); };
 

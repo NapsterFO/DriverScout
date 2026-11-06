@@ -107,7 +107,38 @@ public sealed class DriverRow : INotifyPropertyChanged
     public string? HardwareId { get; init; }
     public string? CurrentVersion { get; init; }
     public DateTime? CurrentDate { get; init; }
-    public DriverUpdate? Update { get; init; }
+    private DriverUpdate? _update;
+    /// <summary>Драйвер, который будет установлен. Если нашлось несколько, пользователь выбирает источник.</summary>
+    public DriverUpdate? Update
+    {
+        get => _update;
+        set
+        {
+            // Пояснение под карточкой было от прежнего варианта — меняем на пояснение нового.
+            if (_result == (_update?.Note ?? "")) _result = value?.Note ?? "";
+            _update = value;
+            foreach (var name in new[] { nameof(Update), nameof(Available), nameof(Source), nameof(IsOlderThanInstalled),
+                                         nameof(StatusText), nameof(ChipText), nameof(CanInstall), nameof(Result), nameof(HasResult) })
+                OnPropertyChanged(name);
+            foreach (var c in Choices) c.Refresh();
+        }
+    }
+
+    /// <summary>Все найденные варианты драйвера из разных источников, лучший первым.</summary>
+    public List<UpdateChoice> Choices { get; } = [];
+    public bool HasChoices => Choices.Count > 1;
+    /// <summary>Имя группы переключателей источника — своя у каждой карточки.</summary>
+    public string ChoiceGroup { get; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>Задаёт варианты; первый становится выбранным.</summary>
+    public void SetChoices(IEnumerable<DriverUpdate> updates)
+    {
+        Choices.Clear();
+        Choices.AddRange(updates.Select(u => new UpdateChoice(this, u)));
+        Update = Choices.FirstOrDefault()?.Update;
+        OnPropertyChanged(nameof(HasChoices));
+    }
+
     /// <summary>Само устройство — чтобы при неудаче подобрать ему драйвер из другого источника.</summary>
     public DeviceInfo? Device { get; init; }
     /// <summary>Страница драйверов на сайте производителя (для ручной проверки).</summary>
@@ -169,4 +200,25 @@ public sealed class DriverRow : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+/// <summary>Вариант драйвера из одного источника — переключатель на карточке устройства.</summary>
+public sealed class UpdateChoice(DriverRow row, DriverUpdate update) : INotifyPropertyChanged
+{
+    public DriverUpdate Update { get; } = update;
+    public string Group => row.ChoiceGroup;
+
+    /// <summary>«TechPowerUp (Intel) · 24.80.0», «Каталог Microsoft · 24.70.0.3».</summary>
+    public string Label => Update.Version is { Length: > 0 } v ? $"{Update.Source} · {v}" : Update.Source;
+    public string Tip => Update.Title + (Update.Date is { } d ? $" от {d:dd.MM.yyyy}" : "") +
+                         (string.IsNullOrEmpty(Update.Note) ? "" : Environment.NewLine + Update.Note);
+
+    public bool IsChosen
+    {
+        get => ReferenceEquals(row.Update, Update);
+        set { if (value && !IsChosen) row.Update = Update; }
+    }
+
+    public void Refresh() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsChosen)));
+    public event PropertyChangedEventHandler? PropertyChanged;
 }

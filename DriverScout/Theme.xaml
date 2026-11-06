@@ -334,6 +334,34 @@
     </Style>
 
     <!-- Фильтр-«пилюля» (категории программ) -->
+    <!-- Маленький переключатель источника на карточке драйвера -->
+    <Style x:Key="SourcePill" TargetType="RadioButton">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Margin" Value="0,0,6,6"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" Background="{StaticResource FieldBrush}" CornerRadius="12" Padding="10,4"
+                            BorderBrush="Transparent" BorderThickness="1.5">
+                        <ContentPresenter x:Name="Text" TextElement.FontSize="12" TextElement.FontWeight="SemiBold"
+                                          TextElement.FontFamily="{StaticResource AppFont}"
+                                          TextElement.Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface2Brush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                            <Setter TargetName="Text" Property="TextElement.Foreground" Value="{StaticResource AccentBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="PillToggle" TargetType="RadioButton">
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Margin" Value="0,0,8,8"/>
