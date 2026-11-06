@@ -70,6 +70,11 @@ public sealed class DriverUpdate
     public string? ExpectedSigner { get; init; }
     /// <summary>Контрольная сумма от производителя, если он её публикует (ASUS).</summary>
     public string? Sha256 { get; init; }
+    /// <summary>
+    /// Запасной вариант, если сайт производителя не отдаёт файл (из России nvidia.com и amd.com бывают недоступны):
+    /// страница на зеркале TechPowerUp и шаблон имени того же файла.
+    /// </summary>
+    public (string Slug, string FilePattern)? Mirror { get; init; }
     public string? PageUrl { get; init; }
     /// <summary>Предупреждение для пользователя (например, «для ноутбуков лучше драйвер от производителя»).</summary>
     public string? Note { get; init; }

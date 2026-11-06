@@ -36,6 +36,7 @@ public sealed class ScanService
             }
         });
 
+        TechPowerUp.Reset();
         var sources = VendorSources.Create();
         var vendor = new Dictionary<DeviceInfo, VendorResult>();
         foreach (var dev in devices)

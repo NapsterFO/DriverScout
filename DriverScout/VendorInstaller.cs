@@ -54,14 +54,34 @@ public static class VendorInstaller
         var file = Path.Combine(DownloadDir, name);
 
         // Уже скачанный и прошедший проверку файл повторно не качаем.
+        string? mirrorSha = null;
         if (!File.Exists(file) || Verify(file, update) is not null)
         {
-            var error = await DownloadAsync(update, file, progress);
+            var error = await TryDownloadAsync(update.DownloadUrl, update.Referer, file, progress);
+            // Сайт производителя не отдал файл (из России так бывает с nvidia.com и amd.com) — берём тот же файл с зеркала.
+            if (error is not null && update.Mirror is { } mirror)
+            {
+                progress("Сайт производителя не отдаёт файл — качаю с зеркала TechPowerUp…");
+                try
+                {
+                    var found = await TechPowerUp.FindFileAsync(mirror.Slug, mirror.FilePattern);
+                    var url = found is null ? null : await TechPowerUp.ResolveAsync(mirror.Slug, found.Id);
+                    if (url is not null)
+                    {
+                        error = await TryDownloadAsync(url, null, file, progress);
+                        mirrorSha = found!.Sha256;
+                    }
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+                {
+                    error += "; зеркало тоже недоступно: " + ex.Message;
+                }
+            }
             if (error is not null) return (null, error);
         }
 
         progress("Проверяю контрольную сумму и цифровую подпись…");
-        var verifyError = Verify(file, update);
+        var verifyError = Verify(file, update) ?? (mirrorSha is null ? null : VerifySha256(file, mirrorSha));
         if (verifyError is not null)
         {
             File.Delete(file);
@@ -70,10 +90,29 @@ public static class VendorInstaller
         return (file, null);
     }
 
-    private static async Task<string?> DownloadAsync(DriverUpdate update, string file, Action<string> progress)
+    private static string? VerifySha256(string file, string expected)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, update.DownloadUrl);
-        if (update.Referer is not null) req.Headers.Referrer = new Uri(update.Referer);
+        using var stream = File.OpenRead(file);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).Equals(expected, StringComparison.OrdinalIgnoreCase)
+            ? null : "Контрольная сумма не совпадает с опубликованной — файл повреждён или подменён";
+    }
+
+    private static async Task<string?> TryDownloadAsync(string url, string? referer, string file, Action<string> progress)
+    {
+        try
+        {
+            return await DownloadAsync(url, referer, file, progress);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+        {
+            return "Ошибка загрузки: " + ex.Message;
+        }
+    }
+
+    private static async Task<string?> DownloadAsync(string url, string? referer, string file, Action<string> progress)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        if (referer is not null) req.Headers.Referrer = new Uri(referer);
 
         using var resp = await VendorSources.Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
         if (!resp.IsSuccessStatusCode) return $"Ошибка загрузки: HTTP {(int)resp.StatusCode}";
@@ -110,13 +149,7 @@ public static class VendorInstaller
     /// </summary>
     private static string? Verify(string file, DriverUpdate update)
     {
-        if (update.Sha256 is { Length: > 0 } expected)
-        {
-            using var stream = File.OpenRead(file);
-            var actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
-            if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
-                return "Контрольная сумма не совпадает с опубликованной — файл повреждён или подменён";
-        }
+        if (update.Sha256 is { Length: > 0 } expected && VerifySha256(file, expected) is { } shaError) return shaError;
         if (IsZip(file))
             return update.Sha256 is { Length: > 0 }
                    || (update.TrustArchiveFromVendor && update.DownloadUrl!.StartsWith("https://", StringComparison.OrdinalIgnoreCase))

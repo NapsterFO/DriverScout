@@ -110,7 +110,19 @@ public sealed class NvidiaSource : IVendorSource
         var url = "https://gfwsl.geforce.com/nvidia_web_services/controller.gfeclientcontent.NG.php/" +
                   "com.nvidia.services.GFEClientContent_NG.getDispDrvrByDevid/" + Uri.EscapeDataString(query);
 
-        using var resp = await VendorSources.Http.GetAsync(url).ConfigureAwait(false);
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await VendorSources.Http.GetAsync(url).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            // Сервис NVIDIA не отвечает (из России так бывает) — смотрим последний драйвер на зеркале TechPowerUp.
+            return await FromMirrorAsync(d, sys).ConfigureAwait(false);
+        }
+        using var _ = resp;
+        if (resp.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.UnavailableForLegalReasons)
+            return await FromMirrorAsync(d, sys).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode) return new VendorResult(null, Page); // карта не поддерживается
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync().ConfigureAwait(false));
         if (!doc.RootElement.TryGetProperty("DriverAttributes", out var attr) || attr.ValueKind != JsonValueKind.Object)
@@ -122,6 +134,7 @@ public sealed class NvidiaSource : IVendorSource
             return new VendorResult(null, details);
 
         DateTime? date = DateTime.TryParse(attr.GetProperty("ReleaseDateTime").GetString(), out var dt) ? dt.Date : null;
+        var download = attr.GetProperty("DownloadURL").GetString();
         return new VendorResult(new DriverUpdate
         {
             Title = attr.GetProperty("Name").GetString() + " " + latest,
@@ -130,10 +143,45 @@ public sealed class NvidiaSource : IVendorSource
             Version = latest,
             Date = date,
             HardwareId = d.HardwareIds.FirstOrDefault(),
-            DownloadUrl = attr.GetProperty("DownloadURL").GetString(),
+            DownloadUrl = download,
             ExpectedSigner = "NVIDIA Corporation",
-            PageUrl = details
+            PageUrl = details,
+            Mirror = (MirrorSlug, MirrorPattern(Regex.Escape(latest), download?.Contains("notebook", StringComparison.OrdinalIgnoreCase) == true))
         }, details);
+    }
+
+    private const string MirrorSlug = "nvidia-geforce-graphics-drivers";
+
+    /// <summary>Имя установщика на зеркале: «621.14-desktop-win10-win11-64bit-international-dch-whql.exe».</summary>
+    private static string MirrorPattern(string version, bool notebook) =>
+        $@"^{version}-{(notebook ? "notebook" : "desktop")}-win10-win11-64bit-international-dch-whql\.exe$";
+
+    /// <summary>Последний драйвер с зеркала TechPowerUp — когда сервис NVIDIA недоступен.</summary>
+    private async Task<VendorResult> FromMirrorAsync(DeviceInfo d, SystemProfile sys)
+    {
+        // У зеркала обычно только версия для настольных — она ставится и на ноутбуки с той же серией карт.
+        var file = (sys.IsLaptop ? await TechPowerUp.FindFileAsync(MirrorSlug, MirrorPattern(@"\d+\.\d+", true)).ConfigureAwait(false) : null)
+                   ?? await TechPowerUp.FindFileAsync(MirrorSlug, MirrorPattern(@"\d+\.\d+", false)).ConfigureAwait(false);
+        var latest = file is null ? null : Regex.Match(file.FileName, @"^\d+\.\d+").Value;
+        if (file is null || !IsNewer(latest!, ToNvidiaVersion(d.DriverVersion))) return new VendorResult(null, Page);
+        var url = await TechPowerUp.ResolveAsync(MirrorSlug, file.Id).ConfigureAwait(false);
+        if (url is null) return new VendorResult(null, Page);
+        return new VendorResult(new DriverUpdate
+        {
+            Title = "GeForce Game Ready Driver " + latest,
+            Source = "TechPowerUp (NVIDIA)",
+            Kind = DriverKind.Installer,
+            Version = latest,
+            HardwareId = d.HardwareIds.FirstOrDefault(),
+            DownloadUrl = url,
+            FileName = file.FileName,
+            Sha256 = file.Sha256,
+            ExpectedSigner = "NVIDIA Corporation",
+            PageUrl = TechPowerUp.PageUrl(MirrorSlug),
+            // С зеркала не узнать, поддерживает ли драйвер именно эту карту (старые серии отваливаются) —
+            // установщик NVIDIA сам откажется, но отмечать автоматически не будем.
+            Note = "Сайт NVIDIA недоступен, драйвер найден на зеркале TechPowerUp — проверьте, что ваша карта поддерживается"
+        }, TechPowerUp.PageUrl(MirrorSlug));
     }
 
     /// <summary>Версия драйвера Windows "32.0.15.6636" → версия NVIDIA "566.36".</summary>
@@ -195,6 +243,8 @@ public sealed class AmdSource : IVendorSource
             Referer = "https://www.amd.com/", // без Referer drivers.amd.com отдаёт HTML вместо файла
             ExpectedSigner = "Advanced Micro Devices",
             PageUrl = page,
+            // Тот же файл (с той же буквой сборки -a/-b/-c под семейство видеокарт) на зеркале TechPowerUp.
+            Mirror = ("amd-radeon-graphics-drivers", "^" + Regex.Escape(System.IO.Path.GetFileName(new Uri(link).LocalPath)) + "$"),
             Note = sys.IsLaptop ? "Ноутбук: AMD рекомендует драйвер от производителя ноутбука" : null
         }, page);
     }
@@ -251,22 +301,4 @@ public sealed class AmdSource : IVendorSource
     }
 
     private static string Slug(string s) => Regex.Replace(s.Trim().ToLowerInvariant(), @"\s+", "-");
-}
-
-/// <summary>
-/// Intel: сайт intel.com закрыт от автоматических запросов, поэтому только даём ссылку
-/// на Intel Driver &amp; Support Assistant. Драйверы Intel в основном приходят и через Windows Update.
-/// </summary>
-public sealed class IntelSource : IVendorSource
-{
-    public string Name => "intel.com";
-    private const string Page = "https://www.intel.com/content/www/us/en/support/detect.html";
-    private static readonly string[] Classes = ["Display", "Net", "Bluetooth"];
-
-    public bool Handles(DeviceInfo d, SystemProfile sys) =>
-        (VendorSources.IsVendor(d, "8086") || d.HardwareIds.Any(h => h.Contains("VID_8087", StringComparison.OrdinalIgnoreCase)))
-        && Classes.Contains(d.DeviceClass, StringComparer.OrdinalIgnoreCase);
-
-    public Task<VendorResult> CheckAsync(DeviceInfo d, SystemProfile sys) =>
-        Task.FromResult(new VendorResult(null, Page));
 }
