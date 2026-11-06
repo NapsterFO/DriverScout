@@ -108,6 +108,8 @@ public sealed class DriverRow : INotifyPropertyChanged
     public string? CurrentVersion { get; init; }
     public DateTime? CurrentDate { get; init; }
     public DriverUpdate? Update { get; init; }
+    /// <summary>Само устройство — чтобы при неудаче подобрать ему драйвер из другого источника.</summary>
+    public DeviceInfo? Device { get; init; }
     /// <summary>Страница драйверов на сайте производителя (для ручной проверки).</summary>
     public string? VendorPage { get; init; }
 

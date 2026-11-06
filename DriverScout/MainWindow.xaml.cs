@@ -310,9 +310,27 @@ public partial class MainWindow : Window
                     if (row.Update!.Kind == DriverKind.Installer)
                     {
                         var progress = new Progress<string>(m => row.Result = m);
-                        string msg;
-                        (ok, msg) = await Task.Run(() => VendorInstaller.DownloadAndRunAsync(row.Update, ((IProgress<string>)progress).Report));
-                        row.Result = msg;
+                        var report = ((IProgress<string>)progress).Report;
+                        // Сначала только скачиваем: если файл не дался (сайт недоступен, проверка не прошла) —
+                        // пробуем драйверпаки SDIO. Ошибку самого установщика так не подменяем.
+                        var (file, dlError) = await Task.Run(() => VendorInstaller.DownloadVerifiedAsync(row.Update, report));
+                        if (file is null && await TrySdiFallbackAsync(row, report) is { } alt)
+                        {
+                            (ok, var rb, var altMsg) = alt;
+                            reboot |= rb;
+                            row.Result = altMsg;
+                        }
+                        else if (file is null)
+                        {
+                            ok = false;
+                            row.Result = dlError!;
+                        }
+                        else
+                        {
+                            string msg;
+                            (ok, msg) = await Task.Run(() => VendorInstaller.DownloadAndRunAsync(row.Update, report));
+                            row.Result = msg;
+                        }
                     }
                     else if (row.Update.Kind == DriverKind.DriverPack)
                     {
@@ -325,7 +343,14 @@ public partial class MainWindow : Window
                     else if (row.Update.Kind == DriverKind.Catalog)
                     {
                         var progress = new Progress<string>(m => row.Result = m);
-                        var (catOk, rb, msg) = await Task.Run(() => UpdateCatalog.InstallAsync(row.Update, ((IProgress<string>)progress).Report));
+                        var report = ((IProgress<string>)progress).Report;
+                        var (catOk, rb, msg) = await Task.Run(() => UpdateCatalog.InstallAsync(row.Update, report));
+                        // Каталог не отдал файл или в нём не нашлось драйвера — тот же драйвер из драйверпаков SDIO.
+                        if (!catOk && await TrySdiFallbackAsync(row, report) is { } alt)
+                        {
+                            (catOk, rb, var altMsg) = alt;
+                            msg = altMsg + (catOk ? "" : $" (каталог Microsoft: {msg})");
+                        }
                         ok = catOk;
                         row.Result = msg;
                         reboot |= rb;
@@ -358,6 +383,34 @@ public partial class MainWindow : Window
         finally
         {
             SetBusy(false);
+        }
+    }
+
+    /// <summary>
+    /// Запасной источник, когда основной не отдал драйвер: драйверпаки SDIO по торренту — они не зависят от сайтов
+    /// производителей и работают без VPN. null — подходящего драйвера в паках нет или их не удалось скачать.
+    /// </summary>
+    private static async Task<(bool ok, bool reboot, string message)?> TrySdiFallbackAsync(DriverRow row, Action<string> report)
+    {
+        if (row.Device is not { } dev) return null;
+        try
+        {
+            return await Task.Run(async () =>
+            {
+                report("Основной источник не отдал драйвер — ищу его в драйверпаках SDIO…");
+                if (!Sdi.SdiService.HasIndexes) await Sdi.SdiService.DownloadIndexesAsync(report, CancellationToken.None);
+                var sys = await Pc.ProfileAsync() ?? SystemProfile.Load();
+                var alt = Sdi.SdiService.Match([dev], sys, report).GetValueOrDefault(dev);
+                if (alt is null) return ((bool, bool, string)?)null;
+                await Sdi.SdiService.DownloadPacksAsync([alt], report, CancellationToken.None);
+                var (ok, reboot, message) = Sdi.SdiService.Install(alt, report);
+                return (ok, reboot, $"{message} — из драйверпака SDIO {alt.PackName}, версия {alt.Version}");
+            });
+        }
+        catch (Exception ex)
+        {
+            report("Драйверпаки SDIO недоступны: " + ex.Message);
+            return null;
         }
     }
 

@@ -104,13 +104,37 @@ public sealed class ScanService
         // Драйверпаки SDIO — последним: только для устройств, которым ничего не нашлось в официальных источниках.
         // Сетевые паки встроены в программу, поэтому этот шаг работает и без интернета.
         var sdi = extra;
+        // Устройствам без драйвера не нашлось ничего в официальных источниках (или те недоступны без VPN) —
+        // один раз скачиваем индексы драйверпаков SDIO: торрент не зависит от сайтов производителей.
+        bool unresolved = devices.Any(d => (d.IsMissingDriver || d.HasProblem) && d.HardwareIds.Length > 0
+                                           && vendor.GetValueOrDefault(d)?.Update is null && FindUpdate(d, updates) is null
+                                           && !extra.ContainsKey(d));
+        if (unresolved && !Sdi.SdiService.HasIndexes)
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+                Sdi.SdiService.DownloadIndexesAsync(m => progress("Ищу драйверы в драйверпаках SDIO: " + m), cts.Token).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                _errors.Add("SDIO: не удалось скачать индексы драйверпаков — " +
+                            (ex is OperationCanceledException ? "торрент не нашёл раздающих за 3 минуты" : ex.Message));
+            }
+        }
         if (Sdi.SdiService.HasIndexes)
         {
             try
             {
                 var rest = devices.Where(d => vendor.GetValueOrDefault(d)?.Update is null && FindUpdate(d, updates) is null
                                               && !extra.ContainsKey(d)).ToList();
-                foreach (var (dev, upd) in Sdi.SdiService.Match(rest, system, progress)) sdi[dev] = upd;
+                // Работающему устройству сторонняя сборка нужна, только если она новее его драйвера производителя:
+                // стандартные драйверы Windows (шины, Bluetooth-профили, AHCI) на сборки SDIO не меняем.
+                foreach (var (dev, upd) in Sdi.SdiService.Match(rest, system, progress))
+                    if (dev.IsMissingDriver || dev.HasProblem
+                        || (!VendorSources.IsInboxDriver(dev) && upd.Date > dev.DriverDate
+                            && VendorSources.ParseVersion(upd.Version) > VendorSources.ParseVersion(dev.DriverVersion)))
+                        sdi[dev] = upd;
             }
             catch (Exception ex)
             {
@@ -155,6 +179,7 @@ public sealed class ScanService
                 CurrentVersion = dev.DriverVersion,
                 CurrentDate = dev.DriverDate,
                 Update = upd,
+                Device = dev,
                 VendorPage = vr?.PageUrl,
                 Result = upd?.Note
                          ?? (status == RowStatus.Missing ? "Драйвер не найден ни в Windows Update, ни у производителей, ни в каталоге Microsoft" : "")

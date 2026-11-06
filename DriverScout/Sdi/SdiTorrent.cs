@@ -65,7 +65,7 @@ public sealed class SdiTorrent : IAsyncDisposable
 
         long total = wanted.Sum(f => f.Length);
         bool Done() => wanted.All(f => f.BitField.AllTrue);
-        if (Done()) { progress(total, total); return; }
+        if (Done()) { MarkComplete(wanted); progress(total, total); return; }
 
         if (manager.State is TorrentState.Stopped or TorrentState.Error)
             await manager.HashCheckAsync(false).ConfigureAwait(false); // уже скачанные куски не качаем повторно
@@ -80,12 +80,26 @@ public sealed class SdiTorrent : IAsyncDisposable
                 progress(wanted.Sum(f => (long)(f.BitField.PercentComplete / 100.0 * f.Length)), total);
                 await Task.Delay(500, ct).ConfigureAwait(false);
             }
+            MarkComplete(wanted);
             progress(total, total);
         }
         finally
         {
             await manager.StopAsync().ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Файл-метка «скачан полностью» рядом с паком.</summary>
+    public static string CompleteMarker(string file) => file + ".ok";
+
+    /// <summary>
+    /// Торрент качает кусками, и куски на стыке файлов попадают в соседние паки: на диске появляются файлы-обрывки
+    /// с именами паков. Полностью скачанные помечаем, чтобы обрывок не приняли за готовый архив.
+    /// </summary>
+    private static void MarkComplete(IEnumerable<ITorrentManagerFile> files)
+    {
+        foreach (var f in files.Where(f => f.BitField.AllTrue && File.Exists(f.FullPath)))
+            File.WriteAllText(CompleteMarker(f.FullPath), "");
     }
 
     public async ValueTask DisposeAsync()

@@ -53,13 +53,19 @@ public static class SdiService
     private static int PackRelease(string pack) =>
         Regex.Match(pack, @"_(\d+)$") is { Success: true } m ? int.Parse(m.Groups[1].Value) : 0;
 
-    /// <summary>Архив драйверпака на диске: сначала встроенный, потом скачанный торрентом.</summary>
-    public static string? PackFile(string packName) =>
-        new[] { Path.Combine(BundledDir, "drivers") }
-            .Concat(Directory.Exists(SdiTorrent.Root)
-                ? Directory.EnumerateDirectories(SdiTorrent.Root).Select(d => Path.Combine(d, "drivers"))
-                : [])
-            .Select(d => Path.Combine(d, packName + ".7z")).FirstOrDefault(File.Exists);
+    /// <summary>
+    /// Архив драйверпака на диске: сначала встроенный, потом скачанный торрентом — только если торрент докачал его
+    /// целиком (обрывки соседних паков на диске тоже лежат под их именами).
+    /// </summary>
+    public static string? PackFile(string packName)
+    {
+        var bundled = Path.Combine(BundledDir, "drivers", packName + ".7z");
+        if (File.Exists(bundled)) return bundled;
+        if (!Directory.Exists(SdiTorrent.Root)) return null;
+        return Directory.EnumerateDirectories(SdiTorrent.Root)
+            .Select(d => Path.Combine(d, "drivers", packName + ".7z"))
+            .FirstOrDefault(f => File.Exists(f) && File.Exists(SdiTorrent.CompleteMarker(f)));
+    }
 
     private static bool IsBundled(string path) =>
         path.StartsWith(BundledDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
