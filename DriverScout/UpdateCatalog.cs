@@ -25,9 +25,64 @@ public static class UpdateCatalog
     private static DateTime _lastSearch;
     private static readonly Regex RowRegex = new(@"<tr id=""([0-9a-f\-]{36})_R\d+""(.*?)</tr>", RegexOptions.Singleline);
 
+    /// <summary>Ответы каталога живут сутки: повторный скан не ждёт тех же запросов по секунде на каждый.</summary>
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(24);
+    private static readonly string CacheFile = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DriverScout", "catalog-cache.json");
+    private static Dictionary<string, CachedSearch>? _cache;
+    /// <summary>Отказов подряд: после нескольких каталог до конца скана не дёргаем — он всё равно не ответит.</summary>
+    private static int _refusals;
+    private const int MaxRefusals = 4;
+
     public sealed record Entry(string UpdateId, string Title, string Products, DateTime? Date, Version? Version, long Size)
     {
         public int? MinBuild { get; } = UpdateCatalog.MinBuild(Products);
+    }
+
+    private sealed record CachedSearch(DateTime Time, List<Entry> Entries);
+
+    /// <summary>Каталог ограничил поиск в этом скане — дальше спрашивать бесполезно.</summary>
+    public static bool Throttled => _refusals >= MaxRefusals;
+
+    /// <summary>Перед новым сканом: снова пробуем каталог, даже если в прошлый раз он отказывал.</summary>
+    public static void BeginScan() => _refusals = 0;
+
+    private static List<Entry>? FromCache(string query)
+    {
+        lock (CacheFile)
+        {
+            if (_cache is null)
+            {
+                try
+                {
+                    _cache = File.Exists(CacheFile)
+                        ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, CachedSearch>>(File.ReadAllText(CacheFile)) ?? []
+                        : [];
+                }
+                catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or UnauthorizedAccessException)
+                {
+                    _cache = [];
+                }
+                _cache = new Dictionary<string, CachedSearch>(
+                    _cache.Where(c => DateTime.UtcNow - c.Value.Time < CacheTtl), StringComparer.OrdinalIgnoreCase);
+            }
+            return _cache.TryGetValue(query, out var hit) && DateTime.UtcNow - hit.Time < CacheTtl ? hit.Entries : null;
+        }
+    }
+
+    private static void ToCache(string query, List<Entry> entries)
+    {
+        lock (CacheFile)
+        {
+            _cache ??= new(StringComparer.OrdinalIgnoreCase);
+            _cache[query] = new CachedSearch(DateTime.UtcNow, entries);
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(CacheFile)!);
+                File.WriteAllText(CacheFile, System.Text.Json.JsonSerializer.Serialize(_cache));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
     }
 
     /// <summary>
@@ -38,6 +93,8 @@ public static class UpdateCatalog
     /// </summary>
     public static async Task<List<Entry>?> SearchAsync(string query)
     {
+        if (FromCache(query) is { } cached) return cached;
+        if (Throttled) return null;
         string html;
         for (int attempt = 1; ; attempt++)
         {
@@ -58,9 +115,14 @@ public static class UpdateCatalog
             if (!html.Contains("catalogBody_searchThrottled", StringComparison.Ordinal) &&
                 (html.Contains("catalogBody_noResultText", StringComparison.Ordinal) || RowRegex.IsMatch(html))) break;
             // Дольше ждать нет смысла: «тяжёлый» запрос не пропускают и через минуты, а скан встал бы на каждом устройстве.
-            if (attempt == 3) return null;
+            if (attempt == 3 || Throttled)
+            {
+                Interlocked.Increment(ref _refusals);
+                return null;
+            }
             await Task.Delay(TimeSpan.FromSeconds(attempt == 1 ? 3 : 10)).ConfigureAwait(false);
         }
+        _refusals = 0;
         var list = new List<Entry>();
         foreach (Match row in RowRegex.Matches(html))
         {
@@ -72,9 +134,12 @@ public static class UpdateCatalog
                 Cell(1),
                 Cell(2),
                 DateTime.TryParseExact(Cell(4), "M/d/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null,
-                Version.TryParse(Cell(5), out var v) ? v : null,
+                // У старых записей в колонке версии «n/a», а версия есть в названии: «Intel Corporation - System - 30.100.2413.49».
+                Version.TryParse(Cell(5), out var v) ? v
+                : Version.TryParse(Regex.Match(Cell(1), @"(\d+(?:\.\d+){2,3})\)?\s*$").Groups[1].Value, out var tv) ? tv : null,
                 long.TryParse(Regex.Match(body, @"_originalSize"">(\d+)<").Groups[1].Value, out var s) ? s : 0));
         }
+        ToCache(query, list);
         return list;
     }
 
@@ -130,34 +195,56 @@ public static class UpdateCatalog
     };
 
     /// <summary>
-    /// Ищет драйвер для устройства: Hardware ID от самого точного к общему, первый запрос с подходящими
-    /// под эту Windows результатами побеждает.
+    /// Короткие ID устройства, по которым каталог реально находит драйверы: «PCI\VEN_8086&amp;DEV_9A49»,
+    /// «USB\VID_8087&amp;PID_0026», «HDAUDIO\FUNC_01&amp;VEN_10EC&amp;DEV_0257», «ACPI\INT34C5».
+    /// Полный ID с SUBSYS/REV каталог почти никогда не находит (записи привязаны к общему ID),
+    /// а с одним REV и вовсе отказывается искать. ID по коду класса (CC_, Class_) общие для целых классов — пропускаем.
     /// </summary>
-    public static async Task<DriverUpdate?> FindAsync(DeviceInfo dev, int osBuild)
-    {
-        // У PCI «VEN_&DEV_» без SUBSYS лежит в Compatible ID — а драйверы в каталоге чаще всего ищутся именно по нему.
-        // ID по коду класса (CC_) пропускаем: они общие для всех сетевых карт, мостов и т. п.
-        var queries = dev.HardwareIds.Concat(dev.CompatibleIds.Where(c => Regex.IsMatch(c, @"DEV_|PID_", RegexOptions.IgnoreCase)))
+    public static List<string> BaseIds(DeviceInfo dev) =>
+        dev.HardwareIds.Concat(dev.CompatibleIds)
             .Select(h => h.TrimStart('*'))
-            .Where(h => h.Length >= 6 && !h.Contains("CC_", StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase).Take(6);
-        bool answered = false;
-        foreach (var q in queries)
+            .Where(h => !Regex.IsMatch(h, @"CC_|Class_|SubClass_|Prot_", RegexOptions.IgnoreCase))
+            .Select(h => Regex.Replace(h, @"&(SUBSYS|REV)_[0-9A-F]+", "", RegexOptions.IgnoreCase))
+            .Select(h => Regex.Replace(h, @"^ACPI\\VEN_(\w+)&DEV_(\w+)$", @"ACPI\$1$2", RegexOptions.IgnoreCase))
+            .Where(h => h.Length >= 6 && h.Contains('\\') && Regex.IsMatch(h, @"DEV_|PID_|^ACPI\\|^HID\\", RegexOptions.IgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>
+    /// Запросы в порядке пользы: короткий ID с названием выпуска Windows (так каталог сам отсеивает драйверы
+    /// под другие версии и не упирается в лимит в 1000 записей), тот же ID без уточнения, с прошлым выпуском
+    /// Windows 11 (драйверы «22H2 and later» подходят и новым), и в конце — полный ID (бывают драйверы под одну модель).
+    /// </summary>
+    public static List<string> Queries(DeviceInfo dev, int osBuild)
+    {
+        var term = ReleaseTerm(osBuild);
+        var list = new List<string>();
+        foreach (var id in BaseIds(dev).Take(2))
         {
-            var plain = await SearchAsync(q).ConfigureAwait(false);
-            var found = (plain ?? []).Where(e => e.MinBuild is { } b && b <= osBuild).ToList();
-            // Первая страница забита драйверами под свежие выпуски Windows 11 — на старой Windows подходящие
-            // туда почти не попадают, а общий ID каталог может и вовсе не искать. Тогда ищем ещё раз,
-            // уточнив запрос названием продукта из колонки «Products».
-            // Если же каталог честно ответил «ничего не найдено», уточнять нечего — лишний запрос только приближает лимит.
-            var narrowed = found.Count < MaxCandidates && plain is not [] ? await SearchAsync(q + " " + ReleaseTerm(osBuild)).ConfigureAwait(false) : null;
-            found.AddRange((narrowed ?? []).Where(e => e.MinBuild is { } b && b <= osBuild && found.All(f => f.UpdateId != e.UpdateId)));
-            answered |= plain is not null || narrowed is not null;
-            var fit = found
+            list.Add(id + " " + term);
+            list.Add(id);
+            if (osBuild >= 22621 && term != "22H2") list.Add(id + " 22H2");
+        }
+        list.AddRange(dev.HardwareIds.Take(1).Where(h => !list.Contains(h, StringComparer.OrdinalIgnoreCase)));
+        return list;
+    }
+
+    /// <summary>
+    /// Ищет драйвер для устройства; первый запрос с подходящими под эту Windows результатами побеждает.
+    /// <paramref name="newerThan"/> — для работающего устройства: годятся только версии новее установленной.
+    /// </summary>
+    public static async Task<DriverUpdate?> FindAsync(DeviceInfo dev, int osBuild, int maxQueries = 7, Version? newerThan = null)
+    {
+        bool answered = false;
+        foreach (var q in Queries(dev, osBuild).Take(maxQueries))
+        {
+            var results = await SearchAsync(q).ConfigureAwait(false);
+            answered |= results is not null;
+            var fit = (results ?? []).Where(e => e.MinBuild is { } b && b <= osBuild && (newerThan is null || e.Version > newerThan))
                 .OrderByDescending(e => e.Version).ThenByDescending(e => e.MinBuild).ThenByDescending(e => e.Date)
                 .Take(MaxCandidates).ToList();
             if (fit.Count == 0) continue;
             var best = fit[0];
+            var id = q.Split(' ')[0];
             return new DriverUpdate
             {
                 Title = best.Title,
@@ -165,8 +252,8 @@ public static class UpdateCatalog
                 Kind = DriverKind.Catalog,
                 Version = best.Version?.ToString(),
                 Date = best.Date,
-                HardwareId = q,
-                Manufacturer = Regex.Match(best.Title, @"^(.+?) (?:\S+ )?Driver Update").Groups[1].Value.Trim() is { Length: > 0 } m ? m : null,
+                HardwareId = id,
+                Manufacturer = Regex.Match(best.Title, @"^(.+?)(?: (?:\S+ )?Driver Update| - )").Groups[1].Value.Trim() is { Length: > 0 } m ? m : null,
                 SizeBytes = best.Size,
                 CatalogIds = fit.Select(e => e.UpdateId).ToArray(),
                 DeviceIds = dev.HardwareIds.Concat(dev.CompatibleIds).ToArray(),

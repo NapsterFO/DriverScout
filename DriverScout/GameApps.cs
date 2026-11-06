@@ -103,6 +103,9 @@ public static class GameApps
                 Source = AppSource.Winget, WingetId = "Asus.ArmouryCrate", PageUrl = "https://rog.asus.com/armoury-crate/", DetectPattern = @"Armoury ?Crate" },
         new() { Name = "GIGABYTE Control Center", Icon = "gigabyte", Description = "Подсветка, вентиляторы и обновления GIGABYTE", Category = "Утилиты производителей", Monogram = "GB", Color = "#FFF15A24",
                 Source = AppSource.Page, PageUrl = "https://www.gigabyte.com/Support/Utility", DetectPattern = @"^GIGABYTE Control Center" },
+        new() { Name = "Intel Driver & Support Assistant", Icon = "intel", Description = "Свежие драйверы Intel: графика, Wi-Fi, Bluetooth, чипсет", Category = "Утилиты производителей", Monogram = "In", Color = "#FF0071C5",
+                Source = AppSource.Winget, WingetId = "Intel.IntelDriverAndSupportAssistant", PageUrl = "https://www.intel.com/content/www/us/en/support/detect.html",
+                DetectPattern = @"^Intel.*Driver (&|and) Support Assistant" },
         new() { Name = "MSI Afterburner", Icon = "afterburner", Description = "Разгон и мониторинг видеокарты", Category = "Утилиты производителей", Monogram = "AB", Color = "#FFB3001B",
                 Source = AppSource.Winget, WingetId = "Guru3D.Afterburner", PageUrl = "https://www.msi.com/Landing/afterburner", DetectPattern = @"^MSI Afterburner" },
 
@@ -150,6 +153,8 @@ public static class GameApps
                 "MSI Center" => maker.Contains("Micro-Star", StringComparison.OrdinalIgnoreCase) || maker.Contains("MSI", StringComparison.Ordinal),
                 "ASUS Armoury Crate" => maker.Contains("ASUS", StringComparison.OrdinalIgnoreCase),
                 "GIGABYTE Control Center" => maker.Contains("Gigabyte", StringComparison.OrdinalIgnoreCase),
+                "Intel Driver & Support Assistant" => gpus.Any(g => g.Contains("Intel", StringComparison.OrdinalIgnoreCase))
+                                                      || (system?.CpuName.Contains("Intel", StringComparison.OrdinalIgnoreCase) ?? false),
                 _ => false
             };
         }

@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Text;
 
 namespace DriverScout;
@@ -18,17 +19,22 @@ public sealed class ScanService
         var system = SystemProfile.Load();
         Oem = OemBrands.Detect(system);
 
-        var updates = new List<DriverUpdate>();
-        progress("Ищу драйверы в Windows Update (может занять пару минут)…");
-        try
+        // Windows Update ищет дольше всех (до пары минут) и ждёт сервер, а не нас — пусть идёт параллельно
+        // с сайтами производителей и каталогом.
+        progress("Ищу драйверы в Windows Update и у производителей…");
+        var wuTask = Task.Run(() =>
         {
-            WindowsUpdate = new WindowsUpdateSource();
-            updates = WindowsUpdate.Search();
-        }
-        catch (Exception ex)
-        {
-            _errors.Add("Windows Update: " + ex.Message);
-        }
+            try
+            {
+                WindowsUpdate = new WindowsUpdateSource();
+                return WindowsUpdate.Search();
+            }
+            catch (Exception ex)
+            {
+                lock (_errors) _errors.Add("Windows Update: " + ex.Message);
+                return [];
+            }
+        });
 
         var sources = VendorSources.Create();
         var vendor = new Dictionary<DeviceInfo, VendorResult>();
@@ -49,30 +55,50 @@ public sealed class ScanService
                 }
                 catch (Exception ex)
                 {
-                    _errors.Add($"{source.Name}: {ex.Message}");
+                    lock (_errors) _errors.Add($"{source.Name}: {ex.Message}");
                 }
             }
             if (chosen is not null || page is not null)
                 vendor[dev] = chosen ?? new VendorResult(null, page);
         }
 
-        // Каталог Microsoft — для устройств без драйвера или с ошибкой: там есть драйверы, которые Windows Update
-        // этому компьютеру сам не предлагает. Устройств таких немного, поэтому каталог не перегружаем.
+        // Каталог Microsoft. В нём лежат драйверы, которые Windows Update этому компьютеру сам не предлагает,
+        // и почти всё от Intel, Realtek, MediaTek, Qualcomm (сайты которых программам не отвечают).
+        // Сначала — устройства без драйвера или с ошибкой, потом — свежие версии для работающих.
+        UpdateCatalog.BeginScan();
         var extra = new Dictionary<DeviceInfo, DriverUpdate>();
-        foreach (var dev in devices.Where(d => (d.IsMissingDriver || d.HasProblem) && d.HardwareIds.Length > 0
-                                               && vendor.GetValueOrDefault(d)?.Update is null && FindUpdate(d, updates) is null))
+        var broken = devices.Where(d => (d.IsMissingDriver || d.HasProblem) && d.HardwareIds.Length > 0
+                                        && vendor.GetValueOrDefault(d)?.Update is null).ToList();
+        var working = devices.Where(d => !broken.Contains(d) && vendor.GetValueOrDefault(d)?.Update is null && WorthCatalogCheck(d))
+            .OrderByDescending(d => VendorSources.IsVendor(d, "8086") || d.HardwareIds.Any(h => h.Contains("VID_8087", StringComparison.OrdinalIgnoreCase)))
+            .Take(MaxCatalogChecks).ToList();
+        int n = 0, done = 0, total = broken.Count + working.Count;
+        foreach (var dev in broken.Concat(working))
         {
-            progress($"Ищу в каталоге Microsoft: {dev.Name}…");
+            bool isBroken = broken.Contains(dev);
             try
             {
-                if (UpdateCatalog.FindAsync(dev, system.OsBuild).GetAwaiter().GetResult() is { } found) extra[dev] = found;
+                if (UpdateCatalog.Throttled) throw new HttpRequestException("каталог временно ограничил поиск");
+                progress($"Ищу в каталоге Microsoft ({++n} из {total}): {dev.Name}…");
+                var found = isBroken
+                    ? UpdateCatalog.FindAsync(dev, system.OsBuild).GetAwaiter().GetResult()
+                    : UpdateCatalog.FindAsync(dev, system.OsBuild, 2, VendorSources.ParseVersion(dev.DriverVersion)).GetAwaiter().GetResult();
+                if (found is not null) extra[dev] = found;
+                done++;
             }
             catch (Exception ex)
             {
-                _errors.Add($"{UpdateCatalog.SourceName}: {ex.Message}");
-                break; // нет интернета или сайт недоступен — не ждём таймаута на каждом устройстве
+                // Для работающих устройств это не беда: проверенное уже в кэше, остальное досмотрим при следующем скане.
+                lock (_errors) _errors.Add(isBroken || ex is not HttpRequestException
+                    ? $"{UpdateCatalog.SourceName}: {ex.Message}"
+                    : $"{UpdateCatalog.SourceName}: проверено {done} из {total} устройств — каталог ограничил число запросов, " +
+                      "остальные проверятся при следующем сканировании");
+                break; // нет интернета или каталог ограничил поиск — не ждём таймаута на каждом устройстве
             }
         }
+
+        if (!wuTask.IsCompleted) progress("Жду ответа Windows Update…");
+        var updates = wuTask.GetAwaiter().GetResult();
 
         // Драйверпаки SDIO — последним: только для устройств, которым ничего не нашлось в официальных источниках.
         // Сетевые паки встроены в программу, поэтому этот шаг работает и без интернета.
@@ -107,7 +133,12 @@ public sealed class ScanService
             if (wu is not null) used.Add(wu);
             var vr = vendor.GetValueOrDefault(dev);
             // Драйвер с сайта производителя проверен как более новый — он важнее Windows Update.
-            var upd = vr?.Update ?? wu ?? sdi?.GetValueOrDefault(dev);
+            // Из каталога Microsoft берём, если там версия новее той, что предлагает Windows Update.
+            var other = sdi?.GetValueOrDefault(dev);
+            var upd = vr?.Update
+                      ?? (wu is not null && other?.Kind == DriverKind.Catalog
+                          && VendorSources.ParseVersion(other.Version) > VendorSources.ParseVersion(wu.Version) ? other : wu)
+                      ?? other;
 
             var status = dev.IsMissingDriver ? RowStatus.Missing
                        : upd is not null ? RowStatus.Update
@@ -146,6 +177,24 @@ public sealed class ScanService
         }
 
         return rows.OrderBy(r => r.Status).ThenBy(r => r.Name).ToList();
+    }
+
+    /// <summary>Сколько работающих устройств проверять в каталоге за скан: по секунде на запрос, больше — уже долго.</summary>
+    private const int MaxCatalogChecks = 40;
+
+    /// <summary>
+    /// Работающее устройство стоит проверить в каталоге: драйвер производителя (не стандартный Microsoft — тот
+    /// нумеруется по-своему, а заменять его без нужды незачем) на «настоящей» шине. Видеокарты NVIDIA и AMD
+    /// проверяются на их сайтах, программные и виртуальные устройства (SWD, ROOT, тома и т. п.) в каталоге не ищем.
+    /// </summary>
+    private static bool WorthCatalogCheck(DeviceInfo d)
+    {
+        if (d.HardwareIds.Length == 0 || VendorSources.IsInboxDriver(d) || VendorSources.ParseVersion(d.DriverVersion) is null)
+            return false;
+        if ((VendorSources.IsVendor(d, "10DE") || VendorSources.IsVendor(d, "1002"))
+            && string.Equals(d.DeviceClass, "Display", StringComparison.OrdinalIgnoreCase)) return false;
+        var bus = d.HardwareIds[0].Split('\\')[0].ToUpperInvariant();
+        return bus is "PCI" or "USB" or "ACPI" or "HDAUDIO" or "INTELAUDIO" or "BTH";
     }
 
     // Hardware ID перечислены от самого точного к самому общему — берём первое совпадение.
